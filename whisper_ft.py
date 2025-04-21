@@ -8,7 +8,11 @@ from scipy.signal import resample
 import random
 from torch.nn.utils.rnn import pad_sequence
 
-print("Requires librosa and soundfile to be installed ------- ")
+## required packages
+import librosa
+import soundfile
+import accelerate
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
