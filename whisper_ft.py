@@ -1,0 +1,83 @@
+from datasets import load_dataset, concatenate_datasets
+from huggingface_hub import login as hf_login
+import load_dotenv
+import os
+import torch
+from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq, Trainer, TrainingArguments
+from scipy.signal import resample
+import random
+from torch.nn.utils.rnn import pad_sequence
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
+model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-large-v3")
+model.to(device)
+model.train()
+
+load_dotenv()
+hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
+
+ds = load_dataset("amuvarma/vas-qa-13", split="train")
+
+sound_idxs = []
+
+for i in range(len(ds)):
+    # check if the text entry contains < or >
+    if '<' in ds[i]['text'] or '>' in ds[i]['text']:
+        sound_idxs.append(i)
+
+
+ds_sounds = ds.select(sound_idxs)
+not_sound_idxs = list(set(range(len(ds))) - set(sound_idxs))
+not_sound_idxs = random.sample(not_sound_idxs, len(sound_idxs))
+ds_not_sounds = ds.select(not_sound_idxs)
+ds_train = concatenate_datasets([ds_sounds, ds_not_sounds])
+
+def map_fn(entry):
+    audio = entry['audio']['array']
+    text = entry['text']
+    audio = resample(audio, int(len(audio) * 16000 / 48000))
+    preproc_audio = processor.feature_extractor(audio, sampling_rate=16000, return_tensors='pt')
+
+    input_features = preproc_audio['input_features'][0] # C should be 80
+    #print(input_features.shape)
+    labels = processor.tokenizer(text).input_ids
+    return {
+        'input_features': input_features,
+        'labels': labels
+    }
+
+ds_train = ds_train.map(map_fn, batched=False, remove_columns=ds_sounds.column_names)
+
+training_args = TrainingArguments(
+    output_dir="./whisper-finetuned",
+    save_steps=500,
+    save_total_limit=2,
+    learning_rate=1e-5,
+    num_train_epochs=5,
+    bf16=True,
+    report_to="none",
+    remove_unused_columns=False,
+)
+
+def data_collator(batch):
+    input_features = torch.stack([torch.tensor(ex["input_features"]) for ex in batch])
+    print(input_features.shape)
+    labels = [torch.tensor(ex["labels"], dtype=torch.long) for ex in batch]
+    labels_padded = pad_sequence(labels, batch_first=True, padding_value=processor.tokenizer.pad_token_id)
+    labels_padded[labels_padded == processor.tokenizer.pad_token_id] = -100
+    return {"input_features": input_features, "labels": labels_padded}
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=ds_train,
+    data_collator=data_collator,
+)
+
+
+print('training')
+trainer.train()
+
+print('pushing to hub')
+trainer.push_to_hub("edwindn/whisper-tags-finetuned")
