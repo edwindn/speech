@@ -8,6 +8,8 @@ from scipy.signal import resample
 import random
 from torch.nn.utils.rnn import pad_sequence
 
+print("Requires librosa and soundfile to be installed ------- ")
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
 model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-large-v3")
@@ -63,7 +65,6 @@ training_args = TrainingArguments(
     bf16=True,
     report_to="none",
     remove_unused_columns=False,
-    evaluation_strategy="steps",
     eval_steps=500,
 )
 
