@@ -84,7 +84,6 @@ training_args = TrainingArguments(
     num_train_epochs=EPOCHS,
     bf16=True,
     remove_unused_columns=False,
-    eval_steps=500,
     report_to="wandb",
     logging_steps=10,
     eval_steps=20,
