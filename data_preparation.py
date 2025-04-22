@@ -1,4 +1,5 @@
-from datasets import load_dataset, snapshot_download
+from datasets import load_dataset
+from huggingface_hub import snapshot_download
 import os
 
 """
