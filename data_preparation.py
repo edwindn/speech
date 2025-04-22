@@ -39,7 +39,7 @@ speaking = snapshot_download(
     revision="main",
     max_workers=CPU_COUNT,
 )
-speaking = load_dataset(speaking_path, split="train")
+speaking = load_dataset(speaking_path, "en",split="train")
 print(speaking)
 print(len(speaking))
 
