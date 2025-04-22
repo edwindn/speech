@@ -77,7 +77,7 @@ ds_train = ds_train.map(map_fn, batched=False, remove_columns=ds_sounds.column_n
 ds_val = ds_val.map(map_fn, batched=False, remove_columns=ds_sounds.column_names)
 
 training_args = TrainingArguments(
-    output_dir="./whisper-finetuned",
+    output_dir="./whisper-tags-finetuned",
     save_steps=500,
     save_total_limit=2,
     learning_rate=1e-5,
