@@ -8,6 +8,7 @@ from scipy.signal import resample
 import random
 from torch.nn.utils.rnn import pad_sequence
 import wandb
+import numpy as np
 
 ## required packages
 import librosa
@@ -21,12 +22,17 @@ model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-large-v3")
 model.to(device)
 model.train()
 
+EPOCHS = 5
+
 wandb.login(key=os.getenv("WANDB_API_KEY"))
 wandb.init(
     project="whisper-finetuning",
     name="training-run",
     config={
         "model_name": "openai/whisper-large-v3",
+        "learning_rate": 1e-5,
+        "num_train_epochs": EPOCHS,
+        "batch_size": 8,
     }
 )
 
@@ -75,11 +81,14 @@ training_args = TrainingArguments(
     save_steps=500,
     save_total_limit=2,
     learning_rate=1e-5,
-    num_train_epochs=5,
+    num_train_epochs=EPOCHS,
     bf16=True,
     remove_unused_columns=False,
     eval_steps=500,
-    report_to="wandb"
+    report_to="wandb",
+    logging_steps=10,
+    logging_dir="./logs",
+    evaluation_strategy="steps",
 )
 
 def data_collator(batch):
@@ -89,12 +98,18 @@ def data_collator(batch):
     labels_padded[labels_padded == processor.tokenizer.pad_token_id] = -100
     return {"input_features": input_features, "labels": labels_padded}
 
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    predictions = np.argmax(logits, axis=-1)
+    return {"accuracy": (predictions == labels).mean()}
+
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=ds_train,
     eval_dataset=ds_val,
     data_collator=data_collator,
+    compute_metrics=compute_metrics,
 )
 
 print('training')
