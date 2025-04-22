@@ -7,6 +7,7 @@ from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq, Trainer, Trai
 from scipy.signal import resample
 import random
 from torch.nn.utils.rnn import pad_sequence
+import wandb
 
 ## required packages
 import librosa
@@ -19,6 +20,15 @@ processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
 model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-large-v3")
 model.to(device)
 model.train()
+
+wandb.login(key=os.getenv("WANDB_API_KEY"))
+wandb.init(
+    project="whisper-finetuning",
+    name="training-run",
+    config={
+        "model_name": "openai/whisper-large-v3",
+    }
+)
 
 load_dotenv()
 hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
@@ -70,6 +80,7 @@ training_args = TrainingArguments(
     report_to="none",
     remove_unused_columns=False,
     eval_steps=500,
+    report_to="wandb"
 )
 
 def data_collator(batch):
