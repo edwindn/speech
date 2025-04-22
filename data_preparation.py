@@ -1,7 +1,10 @@
-from datasets import load_dataset
-from huggingface_hub import snapshot_download
+from datasets import load_dataset, concatenate_datasets
+from huggingface_hub import snapshot_download, login as hf_login
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
+hf_login(os.getenv("HF_TOKEN_EDWIN"))
 """
 finetuning possible:
 https://huggingface.co/datasets/keithito/lj_speech -> single speaker
@@ -13,6 +16,8 @@ load_dataset("mozilla-foundation/common_voice_13_0", "en", split="train") -> com
 
 CPU_COUNT = os.cpu_count()
 
+
+
 voice_effects_path = "lmms-lab/vocalsound" # cough, sigh, laughter, sniff, sneeze, throat clearing
 voice_effects = snapshot_download(
     repo_id=voice_effects_path,
@@ -21,11 +26,10 @@ voice_effects = snapshot_download(
     max_workers=CPU_COUNT,
 )
 voice_effects_test = load_dataset(voice_effects_path, split="test")
-print(voice_effects_test)
-print(len(voice_effects_test))
 voice_effects_val = load_dataset(voice_effects_path, split="val")
-print(voice_effects_val)
-print(len(voice_effects_val))
+voice_effects = concatenate_datasets([voice_effects_test, voice_effects_val])
+print(voice_effects)
+print(len(voice_effects))
 
 
 speaking_path = "mozilla-foundation/common_voice_13_0"
