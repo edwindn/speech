@@ -87,8 +87,7 @@ training_args = TrainingArguments(
     eval_steps=500,
     report_to="wandb",
     logging_steps=10,
-    logging_dir="./logs",
-    evaluation_strategy="steps",
+    eval_steps=20,
 )
 
 def data_collator(batch):
