@@ -77,7 +77,6 @@ training_args = TrainingArguments(
     learning_rate=1e-5,
     num_train_epochs=5,
     bf16=True,
-    report_to="none",
     remove_unused_columns=False,
     eval_steps=500,
     report_to="wandb"
