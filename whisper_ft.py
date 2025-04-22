@@ -15,6 +15,18 @@ import librosa
 import soundfile
 import accelerate
 
+load_dotenv()
+hf_login(os.getenv("HF_TOKEN_EDWIN"))
+
+chkpt_dir = "whisper-finetuned/checkpoint-740"
+model = AutoModelForSpeechSeq2Seq.from_pretrained(chkpt_dir)
+processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
+
+# Push model to Hugging Face
+model.push_to_hub("edwindn/whisper-tags-finetuned")
+processor.push_to_hub("edwindn/whisper-tags-finetuned")
+
+quit()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
@@ -109,6 +121,8 @@ trainer = Trainer(
     data_collator=data_collator,
     compute_metrics=compute_metrics,
 )
+
+hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
 print('training')
 trainer.train()
