@@ -20,9 +20,12 @@ voice_effects = snapshot_download(
     revision="main",
     max_workers=CPU_COUNT,
 )
-voice_effects = load_dataset(voice_effects_path, split="train")
-print(voice_effects)
-print(len(voice_effects))
+voice_effects_test = load_dataset(voice_effects_path, split="test")
+print(voice_effects_test)
+print(len(voice_effects_test))
+voice_effects_val = load_dataset(voice_effects_path, split="val")
+print(voice_effects_val)
+print(len(voice_effects_val))
 
 
 speaking_path = "mozilla-foundation/common_voice_13_0"
