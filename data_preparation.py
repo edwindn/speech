@@ -30,6 +30,7 @@ voice_effects_val = load_dataset(voice_effects_path, split="val")
 voice_effects = concatenate_datasets([voice_effects_test, voice_effects_val])
 print(voice_effects)
 print(len(voice_effects))
+print(voice_effects[0])
 
 speaking_path = "badayvedat/VCTK"
 speaking = snapshot_download(
@@ -41,7 +42,7 @@ speaking = snapshot_download(
 speaking = load_dataset(speaking_path, split="train")
 print(speaking)
 print(len(speaking))
-
+print(speaking[0])
 # speaking_all = load_dataset("mozilla-foundation/common_voice_17_0", "en", split="train", streaming=True)
 # speaking = [next(iter(speaking_all)) for _ in range(100)]
 
