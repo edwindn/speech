@@ -38,9 +38,7 @@ speaking = snapshot_download(
     revision="main",
     max_workers=CPU_COUNT,
 )
-speaking_test = load_dataset(speaking_path, split="test")
-speaking_val = load_dataset(speaking_path, split="val")
-speaking = concatenate_datasets([speaking_test, speaking_val])
+speaking = load_dataset(speaking_path, split="train")
 print(speaking)
 print(len(speaking))
 
