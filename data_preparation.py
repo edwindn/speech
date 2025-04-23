@@ -31,7 +31,7 @@ voice_effects = concatenate_datasets([voice_effects_test, voice_effects_val])
 print(voice_effects)
 print(len(voice_effects))
 
-speaking_path = "mozilla-foundation/common_voice_17_0"
+speaking_path = "badayvedat/VCTK"
 speaking = snapshot_download(
     repo_id=speaking_path,
     repo_type="dataset",
