@@ -31,17 +31,22 @@ voice_effects = concatenate_datasets([voice_effects_test, voice_effects_val])
 print(voice_effects)
 print(len(voice_effects))
 
-
-speaking_path = "mozilla-foundation/common_voice_13_0"
+speaking_path = "mozilla-foundation/common_voice_17_0"
 speaking = snapshot_download(
     repo_id=speaking_path,
     repo_type="dataset",
     revision="main",
     max_workers=CPU_COUNT,
 )
-speaking = load_dataset(speaking_path, "en",split="train")
+speaking_test = load_dataset(speaking_path, split="test")
+speaking_val = load_dataset(speaking_path, split="val")
+speaking = concatenate_datasets([speaking_test, speaking_val])
 print(speaking)
 print(len(speaking))
+
+# speaking_all = load_dataset("mozilla-foundation/common_voice_17_0", "en", split="train", streaming=True)
+# speaking = [next(iter(speaking_all)) for _ in range(100)]
+
 
 
 
