@@ -15,16 +15,16 @@ import os
 llama_token_end = 128256
 snac_vocab_size = 4096
 start_of_text = 128000
-end_of_text = 128001
+end_of_text = 128009
 
-start_of_human = llama_token_end + 1
-end_of_human = llama_token_end + 2
+start_of_human = llama_token_end + 3
+end_of_human = llama_token_end + 4
 
-start_of_gpt = llama_token_end + 3
-end_of_gpt = llama_token_end + 4
+start_of_gpt = llama_token_end + 5
+end_of_gpt = llama_token_end + 6
 
-start_of_audio = llama_token_end + 5
-end_of_audio = llama_token_end + 6
+start_of_audio = llama_token_end + 1
+end_of_audio = llama_token_end + 2
 
 pad_token = llama_token_end + 7
 
