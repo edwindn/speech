@@ -6,6 +6,7 @@ import os
 from huggingface_hub import login as hf_login
 import wandb
 from transformers import TrainingArguments, Trainer, default_data_collator
+import accelerate
 
 load_dotenv()
 
@@ -104,4 +105,4 @@ print('training')
 trainer.train()
 
 print('pushing to hub')
-trainer.push_to_hub("edwindn/orpheus-3b-mayaFinetune-0.1", private=True)
+trainer.push_to_hub("edwindn/orpheus-3b-voiceFinetune-0.1")
