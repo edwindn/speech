@@ -48,7 +48,6 @@ class OrpheusInference(nn.Module):
             self,
             tokens: list[int],
     ):  
-        print(len(tokens))
         assert len(tokens) % 7 == 0, "Token length must be divisible by 7"
         tokens = torch.tensor(tokens, device=self.device).reshape(-1, 7) - audio_token_start
         
@@ -98,7 +97,7 @@ class OrpheusInference(nn.Module):
 
         start_audio_idx = (output_tokens[0] == start_of_audio).nonzero(as_tuple=True)[0]
         output_tokens = output_tokens[0][start_audio_idx + 1:].tolist()
-        print(len(output_tokens))
+        print('output_tokens length:', len(output_tokens))
 
         if output_tokens[-1] == end_of_audio:
             output_tokens = output_tokens[:-1]
@@ -149,7 +148,7 @@ if __name__ == "__main__":
     orpheus = OrpheusInference(device)
     #sample_text = "I am tara, one of Orpheus's voices <giggle>. I can speak pretty well considering I only have 1 billion parameters."
     #sample_text = "Hey there guys. It's Tara here, and let me introduce you to Zac... who seems to be asleep. Zac, it's time to wakey-wakey!"
-    sample_text = "I am Orpheus-3b, and I was finetuned on Maya's voice. Do I sound like her at all?"
+    sample_text = "I am Orpheus-3b, and I was finetuned on Maya's voice. Do I sound like her at all? DUDE, ARE YOU EVEN LISTENING??"
 
     reconstructed_audio = orpheus(sample_text)
     
