@@ -26,6 +26,7 @@ model = AutoModelForCausalLM.from_pretrained("canopylabs/orpheus-3b-0.1-pretrain
 model = model.to(device)
 
 ds = load_dataset("edwindn/orpheus-3b-maya-finetune", split="train")
+ds.shuffle(seed=42)
 
 if USE_WANDB:
     wandb.login(key=os.getenv("WANDB_API_KEY"))
@@ -76,7 +77,7 @@ print("\n→", tokenizer.decode(out[0], skip_special_tokens=True))
 
 
 training_args = TrainingArguments(
-    output_dir="orpheus-3b-mayaFinetune-0.1",
+    output_dir="orpheus-3b-voiceFinetune-0.1",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
     num_train_epochs=1,
