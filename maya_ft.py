@@ -115,9 +115,9 @@ def collate_fn(batch):
         print(f"Batch stats: {truncated_count} sequences truncated, {total_tokens_removed} tokens removed")
     
     return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "labels": input_ids.copy()
+        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+        "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+        "labels": torch.tensor(input_ids, dtype=torch.long)
     }
 
 trainer = Trainer(
