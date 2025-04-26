@@ -149,7 +149,7 @@ if __name__ == "__main__":
     #sample_text = "I am tara, one of Orpheus's voices <giggle>. I can speak pretty well considering I only have 1 billion parameters."
     #sample_text = "Hey there guys. It's Tara here, and let me introduce you to Zac... who seems to be asleep. Zac, it's time to wakey-wakey!"
     sample_texts = [
-        "I am Orpheus-3b, and, uh, I was finetuned on Maya's voice. (giggle) Do I sound like her at all? DUDE, ARE YOU EVEN LISTENING??",
+        "I am Orpheus-3b, and, uh, I was finetuned on Maya's voice. Do I sound like her at all? DUDE, ARE YOU EVEN LISTENING??",
         "Hey, I'm Orpheus-3b, but I was finetuned to sound like Maya."
     ]
 

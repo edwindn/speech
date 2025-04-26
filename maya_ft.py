@@ -6,7 +6,7 @@ import os
 from huggingface_hub import login as hf_login
 import wandb
 from transformers import TrainingArguments, Trainer, default_data_collator
-import accelerate
+import accelerate # install trl
 
 load_dotenv()
 
@@ -25,7 +25,7 @@ model = AutoModelForCausalLM.from_pretrained("canopylabs/orpheus-3b-0.1-pretrain
 
 model = model.to(device)
 
-ds = load_dataset("edwindn/orpheus-3b-maya-finetune", split="train")
+ds = load_dataset("edwindn/orpheus-3b-maya-finetune-v2", split="train")
 ds.shuffle(seed=42)
 
 if USE_WANDB:
@@ -75,9 +75,8 @@ with torch.no_grad():
 print("\n→", tokenizer.decode(out[0], skip_special_tokens=True))
 
 
-
 training_args = TrainingArguments(
-    output_dir="orpheus-3b-voiceFinetune-0.1",
+    output_dir="orpheus-3b-voiceFinetune-0.2",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
     num_train_epochs=1,
@@ -106,4 +105,4 @@ print('training')
 trainer.train()
 
 print('pushing to hub')
-trainer.push_to_hub("edwindn/orpheus-3b-voiceFinetune-0.1")
+trainer.push_to_hub("edwindn/orpheus-3b-voiceFinetune-0.2")
