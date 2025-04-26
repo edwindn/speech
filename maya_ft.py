@@ -93,12 +93,40 @@ training_args = TrainingArguments(
     optim="adamw_torch_fused",
 )
 
+def collate_fn(batch):
+    max_length = min(MAX_SEQ_LENGTH, max(len(item["input_ids"]) for item in batch))
+    
+    truncated_count = 0
+    total_tokens_removed = 0
+    
+    input_ids = []
+    attention_mask = []
+    
+    for item in batch:
+        original_length = len(item["input_ids"])
+        if original_length > max_length:
+            truncated_count += 1
+            total_tokens_removed += original_length - max_length
+        
+        input_ids.append(item["input_ids"][:max_length])
+        attention_mask.append(item["attention_mask"][:max_length])
+    
+    if truncated_count > 0:
+        print(f"Batch stats: {truncated_count} sequences truncated, {total_tokens_removed} tokens removed")
+    
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "labels": input_ids.copy()
+    }
+
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=ds,
     tokenizer=tokenizer,
-    data_collator=default_data_collator,
+    #data_collator=default_data_collator,
+    data_collator=collate_fn,
 )
 
 print('training')
