@@ -5,8 +5,10 @@ import torch.nn as nn
 from pyannote.audio import Model, Inference
 from dotenv import load_dotenv
 import os
+from huggingface_hub import login as hf_login
 
 load_dotenv()
+hf_login(os.getenv("HF_TOKEN"))
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-3B")
 
