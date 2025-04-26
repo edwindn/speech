@@ -8,11 +8,10 @@ import os
 
 load_dotenv()
 
-llama = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-3B")
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-3B")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-llama = llama.to(device)
+
 print(f"Using device: {device}")
 
 class GatedMLP(nn.Module):
@@ -40,9 +39,15 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         
-        self.projection = GatedMLP()
+        self.projection = GatedMLP().to(device)
+        self.llama = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-3B").to(device)
+        self.tokenizer = tokenizer
 
     def forward(self, input_ids, attention_mask):
         return
+    
+
+embedding = embed_speaker("reconstructed_audio.wav")
+print(embedding.shape)
 
 
