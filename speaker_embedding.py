@@ -10,7 +10,7 @@ from huggingface_hub import login as hf_login
 load_dotenv()
 hf_login(os.getenv("HF_TOKEN"))
 
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-3B")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
