@@ -13,7 +13,7 @@ load_dotenv()
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
 USE_WANDB = True
-MAX_SEQ_LENGTH = 8192
+MAX_SEQ_LENGTH = 4096
 CPU_COUNT = os.cpu_count()
 TRAIN_BATCH_SIZE = 1
 
