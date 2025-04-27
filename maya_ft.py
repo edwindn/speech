@@ -94,8 +94,7 @@ training_args = TrainingArguments(
 )
 
 def collate_fn(batch):
-    max_length = min(MAX_SEQ_LENGTH, max(len(item["input_ids"]) for item in batch))
-    
+    max_length = MAX_SEQ_LENGTH
     truncated_count = 0
     total_tokens_removed = 0
     
@@ -113,6 +112,8 @@ def collate_fn(batch):
     
     if truncated_count > 0:
         print(f"Batch stats: {truncated_count} sequences truncated, {total_tokens_removed} tokens removed")
+
+    assert len(input_ids) <= MAX_SEQ_LENGTH
     
     return {
         "input_ids": torch.tensor(input_ids, dtype=torch.long),
@@ -125,7 +126,6 @@ trainer = Trainer(
     args=training_args,
     train_dataset=ds,
     tokenizer=tokenizer,
-    #data_collator=default_data_collator,
     data_collator=collate_fn,
 )
 
