@@ -25,7 +25,7 @@ model = AutoModelForCausalLM.from_pretrained("canopylabs/orpheus-3b-0.1-pretrain
 
 model = model.to(device)
 
-ds = load_dataset("edwindn/orpheus-3b-maya-finetune-v2", split="train")
+ds = load_dataset("edwindn/orpheus-3b-maya-finetune-v3", split="train")
 ds.shuffle(seed=42)
 
 if USE_WANDB:
@@ -80,7 +80,7 @@ training_args = TrainingArguments(
     per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
     num_train_epochs=1,
-    learning_rate=5e-5,
+    learning_rate=1e-4,
     gradient_checkpointing=False,
     bf16=True,
     logging_steps=5,
