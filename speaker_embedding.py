@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, default_data_collator
 import torch
 import torch.nn as nn
 from pyannote.audio import Model, Inference
@@ -16,7 +16,6 @@ SPEAKER_EMBEDDING_DIM = 256
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
 NUM_WORKERS = min(os.cpu_count(), 10)
-
 
 # ---------------------- #
 
@@ -63,12 +62,8 @@ class GatedMLP(nn.Module):
         return x
     
 
-model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
-inference = Inference(model, window="whole")
-
-def embed_speaker(audio_path):
-    embedding = inference(audio_path)
-    return embedding
+speaker_embedding_model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
+embed_speaker = Inference(speaker_embedding_model, window="whole")
 
 
 class LlamaForSpeakerModeling(AutoModelForCausalLM):
@@ -79,8 +74,33 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         self.llama = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-3B").to(device)
         self.tokenizer = tokenizer
 
-    def forward(self, input_ids, attention_mask):
-        return
+    def forward(
+            self,
+            input_ids: torch.Tensor,
+            speaker_embedding: torch.Tensor,
+            labels: torch.Tensor,
+        ):
+        # input_ids = text + audio
+
+        B, A = input_ids.size()
+        _, T = labels.size()
+
+        speaker_embedding = self.projection(speaker_embedding)
+        audio_embedding = self.llama.embed_tokens(input_ids)
+        pad_tensor = torch.ones((B, 1), dtype=torch.long) * pad_token
+        model_inputs = torch.cat([audio_embedding, pad_tensor, speaker_embedding], dim=1) # can remove pad tensor
+
+        audio_mask = torch.ones((B, A), dtype=torch.long, device=audio_embedding.device)
+        pad_mask = torch.ones((B, 1), dtype=torch.long, device=audio_embedding.device)
+        text_mask = torch.ones((B, T), dtype=torch.long, device=audio_embedding.device)
+        attention_mask = torch.cat([audio_mask, pad_mask, text_mask], dim=1)
+
+        ignore_audio = torch.full_like(model_inputs, -100, device=model_inputs.device, dtype=labels.dtype)
+        labels_padded = torch.cat([ignore_audio, labels], dim=1)
+
+        out = self.llama(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
+
+        return out.loss, out.logits
 
 
 def map_fn(batch):
@@ -100,20 +120,11 @@ def map_fn(batch):
     embedding = embed_speaker(audio)
 
     return {
-        "text_tokens": text_tokens,
-        "audio_tokens": audio_tokens,
+        "input_ids": audio_tokens,
+        "labels": text_tokens,
         "speaker_embedding": embedding,
     }
 
-
-def collate_fn(features):
-    return
-
-
-
-embedding = embed_speaker("reconstructed_audio.wav")
-print(embedding.shape)
-quit()
 
 repo_id = "amuvarma/em-EN"
 snapshot_download(
@@ -124,6 +135,10 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 dataset = dataset.map(map_fn, batched=False, num_proc=NUM_WORKERS)
+
+model = LlamaForSpeakerModeling(config=tokenizer.config)
+
+
 
 
 training_args = TrainingArguments(
@@ -138,7 +153,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    data_collator=collate_fn,
+    data_collator=default_data_collator,
 )
 
 print("training")
