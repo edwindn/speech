@@ -9,8 +9,6 @@ from huggingface_hub import login as hf_login, snapshot_download
 import librosa
 
 load_dotenv()
-hf_login(os.getenv("HF_TOKEN"))
-
 
 SPEAKER_EMBEDDING_DIM = 256
 LLAMA_EMBEDDING_DIM = 3072
@@ -42,6 +40,19 @@ middle = [end_of_text, end_of_human, start_of_gpt, start_of_audio]
 end = [end_of_audio, end_of_gpt]
 
 # ---------------------- #
+
+hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
+repo_id = "amuvarma/em-EN"
+snapshot_download(
+    repo_id=repo_id,
+    repo_type="dataset",
+    revision="main",        
+    max_workers=NUM_WORKERS,
+) 
+dataset = load_dataset(repo_id, split="train")
+
+
+hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
 
@@ -125,15 +136,6 @@ def map_fn(batch):
         "speaker_embedding": embedding,
     }
 
-
-repo_id = "amuvarma/em-EN"
-snapshot_download(
-    repo_id=repo_id,
-    repo_type="dataset",
-    revision="main",        
-    max_workers=NUM_WORKERS,
-) 
-dataset = load_dataset(repo_id, split="train")
 dataset = dataset.map(map_fn, batched=False, num_proc=NUM_WORKERS)
 
 model = LlamaForSpeakerModeling(config=tokenizer.config)
