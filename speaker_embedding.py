@@ -13,7 +13,7 @@ load_dotenv()
 SPEAKER_EMBEDDING_DIM = 256
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
-NUM_WORKERS = min(os.cpu_count(), 10)
+NUM_WORKERS = min(os.cpu_count(), 64)
 
 # ---------------------- #
 
