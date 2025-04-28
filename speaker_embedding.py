@@ -111,6 +111,9 @@ def collate_fn(features):
 
 
 
+embedding = embed_speaker("reconstructed_audio.wav")
+print(embedding.shape)
+quit()
 
 repo_id = "amuvarma/em-EN"
 snapshot_download(
