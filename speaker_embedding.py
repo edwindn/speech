@@ -17,6 +17,8 @@ LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
 NUM_WORKERS = 1 # min(os.cpu_count(), 64)
 
+# DE-DUPLICATE CODES
+
 # ---------------------- #
 
 llama_token_end = 128256
@@ -129,14 +131,17 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         audio_embedding = self.llama.embed_tokens(input_ids)
         pad_tensor = torch.ones((B, 1), dtype=torch.long) * pad_token
         model_inputs = torch.cat([audio_embedding, pad_tensor, speaker_embedding], dim=1) # can remove pad tensor
+        print(f'model_inputs: {model_inputs.shape}')
 
         audio_mask = torch.ones((B, A), dtype=torch.long, device=audio_embedding.device)
         pad_mask = torch.ones((B, 1), dtype=torch.long, device=audio_embedding.device)
         text_mask = torch.ones((B, T), dtype=torch.long, device=audio_embedding.device)
         attention_mask = torch.cat([audio_mask, pad_mask, text_mask], dim=1)
-
+        print(f'attention mask: {attention_mask.shape}')
+        
         ignore_audio = torch.full_like(model_inputs, -100, device=model_inputs.device, dtype=labels.dtype)
         labels_padded = torch.cat([ignore_audio, labels], dim=1)
+        print(f'labels: {labels_padded.shape}')
 
         out = self.llama(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
