@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import os
 from huggingface_hub import login as hf_login, snapshot_download
 import librosa
+from snac import SNAC
 
 load_dotenv()
 
@@ -50,17 +51,17 @@ snapshot_download(
     max_workers=NUM_WORKERS,
 ) 
 dataset = load_dataset(repo_id, split="train")
-print(dataset)
-print(dataset[0])
-quit()
+
 
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 print(f"Using device: {device}")
+
+snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
+snac = snac.to(device)
 
 class GatedMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -77,6 +78,31 @@ class GatedMLP(nn.Module):
 
 speaker_embedding_model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
 embed_speaker = Inference(speaker_embedding_model, window="whole")
+
+
+def detokenize_codes(tokens):
+    assert len(tokens) % 7 == 0, "Token length must be divisible by 7"
+    tokens = torch.tensor(tokens, device=device).reshape(-1, 7) - audio_token_start
+
+    snac0 = tokens[:, 0].unsqueeze(0)
+    snac1 = torch.stack([
+        tokens[:, 1] - snac_vocab_size,
+        tokens[:, 4] - snac_vocab_size * 4
+    ], dim=1).flatten().unsqueeze(0)
+    snac2 = torch.stack([
+        tokens[:, 2] - snac_vocab_size * 2,
+        tokens[:, 3] - snac_vocab_size * 3,
+        tokens[:, 5] - snac_vocab_size * 5,
+        tokens[:, 6] - snac_vocab_size * 6
+    ], dim=1).flatten().unsqueeze(0)
+
+    codes = [snac0, snac1, snac2]
+
+    assert all(c < snac_vocab_size for c in codes[0][0]), "snac0 must be less than snac_vocab_size"
+    assert all(c < snac_vocab_size for c in codes[1][0]), "snac1 must be less than snac_vocab_size"
+    assert all(c < snac_vocab_size for c in codes[2][0]), "snac2 must be less than snac_vocab_size"
+
+    return codes
 
 
 class LlamaForSpeakerModeling(AutoModelForCausalLM):
@@ -116,20 +142,15 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         return out.loss, out.logits
 
 
+
 def map_fn(batch):
     audio_tokens = batch["codes_list"]
     text = batch["text"]
     text_tokens = tokenizer(text).input_ids
 
-    sr = batch["audio"]["sampling_rate"]
-
-    if sr != AUDIO_EMBEDDING_SR:
-        audio = librosa.resample(
-            y=audio,
-            orig_sr=sr,
-            target_sr=AUDIO_EMBEDDING_SR
-        )
-
+    codes = detokenize_codes(audio_tokens)
+    with torch.inference_mode():
+        audio = snac.decode(codes)
     embedding = embed_speaker(audio)
 
     return {
@@ -139,6 +160,9 @@ def map_fn(batch):
     }
 
 dataset = dataset.map(map_fn, batched=False, num_proc=NUM_WORKERS)
+print(dataset)
+print(dataset[0])
+quit()
 
 model = LlamaForSpeakerModeling(config=tokenizer.config)
 
