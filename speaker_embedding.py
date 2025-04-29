@@ -143,7 +143,7 @@ class SpeakerModelingLM(PreTrainedModel):
         labels = tokenizer(text, return_tensors="pt")["input_ids"].to(device).unsqueeze(1)
 
         B, A = input_ids.size()
-        _, T, _ = labels.size()
+        T = labels.size(1)
 
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(input_ids)
@@ -155,8 +155,10 @@ class SpeakerModelingLM(PreTrainedModel):
 
         input_T = model_inputs.size(1)
         ignore_audio = torch.full((B, input_T, T), -100, device=device, dtype=labels.dtype)
+        print(f'ignore_audio: {ignore_audio.shape}')
+        print(f'labels: {labels.shape}')
         labels_padded = torch.cat([ignore_audio, labels], dim=1)
-        print(f'labels: {labels_padded.shape}')
+        print(f'labels_padded: {labels_padded.shape}')
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
