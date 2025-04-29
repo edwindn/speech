@@ -60,6 +60,10 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 
+print(dataset[0])
+
+quit()
+
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
