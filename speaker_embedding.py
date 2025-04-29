@@ -44,6 +44,8 @@ start = [start_of_human]
 middle = [end_of_text, end_of_human, start_of_gpt, start_of_audio]
 end = [end_of_audio, end_of_gpt]
 
+start, middle, end = torch.tensor(start), torch.tensor(middle), torch.tensor(end)
+
 # ---------------------- #
 
 model_name = "canopylabs/orpheus-3b-0.1-pretrained"
@@ -60,9 +62,7 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 
-print(dataset[0])
-
-quit()
+dataset = dataset.select(range(10000))
 
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
@@ -70,6 +70,15 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
+
+def map_fn(batch):
+    text = batch["text"]
+    text_tokens = tokenizer(text).input_ids
+    batch["text"] = text_tokens
+    return batch
+
+dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
+
 
 # snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
 # snac = snac.to(device)
@@ -128,6 +137,11 @@ class SpeakerModelingLM(PreTrainedModel):
         self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
         self.embedding_layer = self.model.get_input_embeddings()
         print(f'embedding_layer: {self.embedding_layer.weight.shape}')
+
+        self.start_embedding = self.embedding_layer(start).unsqueeze(0)
+        self.middle_embedding = self.embedding_layer(middle).unsqueeze(0)
+        self.end_embedding = self.embedding_layer(end).unsqueeze(0)
+        # self.pad_embedding = self.embedding_layer.weight[pad_token].view(1, 1, -1)
         # post init
 
     @classmethod
@@ -137,31 +151,28 @@ class SpeakerModelingLM(PreTrainedModel):
 
     def forward(
             self,
-            input_ids: torch.Tensor,
+            codes_list: torch.Tensor, # audio
             speaker_embedding: torch.Tensor,
-            text: str,
+            text: torch.Tensor,
             **kwargs
         ):
 
-        # ADD STRUCTURE TOKENS
+        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
+        # text_tokens = tokenizer(text, return_tensors="pt")["input_ids"].to(device)
 
-        # input_ids = text + audio
-        input_ids, speaker_embedding = input_ids.to(device), speaker_embedding.to(device)
-        labels = tokenizer(text, return_tensors="pt")["input_ids"].to(device)
-
-        B, A = input_ids.size()
+        B, A = codes_list.size()
 
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
-        audio_embedding = self.embedding_layer(input_ids)
-        pad_embedding = self.embedding_layer.weight[pad_token].view(1, 1, -1)
-        label_embedding = self.embedding_layer(labels)
-        model_inputs = torch.cat([audio_embedding, pad_embedding, speaker_embedding, label_embedding], dim=1)
-        # print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
+        audio_embedding = self.embedding_layer(codes_list)
+        text_embedding = self.embedding_layer(text)
+
+        model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
+        print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
 
         attention_mask = torch.ones_like(model_inputs)
 
-        labels_padded = torch.cat([input_ids, torch.tensor([-100] * 2, device=device, dtype=labels.dtype).repeat(B, 1), labels], dim=1)
-        # print(f'labels_padded: {labels_padded.shape}') # 1, T
+        labels_padded = torch.cat([start, text, middle, torch.tensor([-100], device=device, dtype=text.dtype).repeat(B, 1), codes_list, end], dim=1)
+        print(f'labels_padded: {labels_padded.shape}') # 1, T
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
@@ -174,7 +185,7 @@ def collate_fn(batch):
     coll = default_data_collator(batch)
     coll["input_ids"] = torch.stack([torch.tensor(b["codes_list"]) for b in batch], dim=0)
     # coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
-    coll["text"] = [b["text"] for b in batch]
+    coll["text"] = torch.stack([torch.tensor(b["text"]) for b in batch], dim=0)
     return coll
 
 training_args = TrainingArguments(
@@ -191,7 +202,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    data_collator=collate_fn,
+    data_collator=default_data_collator,
 )
 
 print("training")
