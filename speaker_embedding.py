@@ -147,9 +147,9 @@ class SpeakerModelingLM(PreTrainedModel):
 
         print(f'input_ids: {input_ids.shape}')
 
-        speaker_embedding = self.speaker_projection(speaker_embedding)
+        speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(input_ids)
-        pad_tensor = torch.ones((B, 1), dtype=torch.long, device=device) * pad_token
+        pad_tensor = torch.ones((B, 1), dtype=torch.long, device=device).unsqueeze(1) * pad_token
         print(f'pad_tensor: {pad_tensor.shape}')
         print(f'speaker_embedding: {speaker_embedding.shape}')
         print(f'audio_embedding: {audio_embedding.shape}')
@@ -176,8 +176,8 @@ model = SpeakerModelingLM.from_pretrained(model_name).to(device)
 def collate_fn(batch):
     coll = default_data_collator(batch)
     coll["input_ids"] = torch.stack([torch.tensor(b["codes_list"]) for b in batch], dim=0)
-    coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
-    coll["text"] = [b["text"] for b in batch]
+    # coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
+    # coll["text"] = [b["text"] for b in batch]
     return coll
 
 training_args = TrainingArguments(
