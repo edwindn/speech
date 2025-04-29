@@ -147,6 +147,9 @@ class SpeakerModelingLM(PreTrainedModel):
         speaker_embedding = self.speaker_projection(speaker_embedding)
         audio_embedding = self.embedding_layer(input_ids)
         pad_tensor = torch.ones((B, 1), dtype=torch.long, device=device) * pad_token
+        print(f'pad_tensor: {pad_tensor.shape}')
+        print(f'speaker_embedding: {speaker_embedding.shape}')
+        print(f'audio_embedding: {audio_embedding.shape}')
         model_inputs = torch.cat([audio_embedding, pad_tensor, speaker_embedding], dim=1) # can remove pad tensor
         print(f'model_inputs: {model_inputs.shape}')
 
