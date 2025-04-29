@@ -13,7 +13,7 @@ import wandb
 
 load_dotenv()
 
-SPEAKER_EMBEDDING_DIM = 256
+SPEAKER_EMBEDDING_DIM = 0
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
 NUM_WORKERS = 1
@@ -81,7 +81,7 @@ class GatedMLP(nn.Module):
         return x
     
 
-# speaker_embedding_model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
+# speaker_embedding_model = Model.from_pretrained("pyannote/embedding")
 # embed_speaker = Inference(speaker_embedding_model, window="whole")
 
 
@@ -122,9 +122,10 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
             self,
             input_ids: torch.Tensor,
             speaker_embedding: torch.Tensor,
-            labels: torch.Tensor,
+            text: str,
         ):
         # input_ids = text + audio
+        labels = tokenizer(text).input_ids
 
         B, A = input_ids.size()
         _, T = labels.size()
@@ -149,21 +150,6 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
 
         return out.loss, out.logits
 
-
-
-def map_fn(batch):
-    audio_tokens = batch["codes_list"]
-    text = batch["text"]
-    embedding = batch["speaker_embedding"]
-    text_tokens = tokenizer(text).input_ids
-
-    return {
-        "input_ids": audio_tokens,
-        "labels": text_tokens,
-        "speaker_embedding": embedding,
-    }
-
-dataset = dataset.map(map_fn, batched=False, num_proc=NUM_WORKERS)
 
 model = LlamaForSpeakerModeling(config=tokenizer.config)
 
