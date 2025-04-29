@@ -143,7 +143,7 @@ class SpeakerModelingLM(PreTrainedModel):
         labels = tokenizer(text, return_tensors="pt")["input_ids"].to(device).unsqueeze(1)
 
         B, A = input_ids.size()
-        _, T = labels.size()
+        _, T, _ = labels.size()
 
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(input_ids)
