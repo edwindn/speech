@@ -50,7 +50,9 @@ snapshot_download(
     max_workers=NUM_WORKERS,
 ) 
 dataset = load_dataset(repo_id, split="train")
-
+print(dataset)
+print(dataset[0])
+quit()
 
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
