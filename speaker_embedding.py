@@ -138,9 +138,9 @@ class SpeakerModelingLM(PreTrainedModel):
         self.embedding_layer = self.model.get_input_embeddings()
         print(f'embedding_layer: {self.embedding_layer.weight.shape}')
 
-        self.start_embedding = self.embedding_layer(start).unsqueeze(0)
-        self.middle_embedding = self.embedding_layer(middle).unsqueeze(0)
-        self.end_embedding = self.embedding_layer(end).unsqueeze(0)
+        self.start_embedding = self.embedding_layer(start).unsqueeze(0).to(device)
+        self.middle_embedding = self.embedding_layer(middle).unsqueeze(0).to(device)
+        self.end_embedding = self.embedding_layer(end).unsqueeze(0).to(device)
         # self.pad_embedding = self.embedding_layer.weight[pad_token].view(1, 1, -1)
         # post init
 
