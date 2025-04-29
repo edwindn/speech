@@ -138,9 +138,9 @@ class SpeakerModelingLM(PreTrainedModel):
         self.embedding_layer = self.model.get_input_embeddings()
         print(f'embedding_layer: {self.embedding_layer.weight.shape}')
 
-        self.start_embedding = self.embedding_layer(start).unsqueeze(0).to(device)
-        self.middle_embedding = self.embedding_layer(middle).unsqueeze(0).to(device)
-        self.end_embedding = self.embedding_layer(end).unsqueeze(0).to(device)
+        self.start_embedding = self.embedding_layer(start).unsqueeze(0)
+        self.middle_embedding = self.embedding_layer(middle).unsqueeze(0)
+        self.end_embedding = self.embedding_layer(end).unsqueeze(0)
         # self.pad_embedding = self.embedding_layer.weight[pad_token].view(1, 1, -1)
         # post init
 
@@ -166,7 +166,11 @@ class SpeakerModelingLM(PreTrainedModel):
         audio_embedding = self.embedding_layer(codes_list)
         text_embedding = self.embedding_layer(text)
 
-        model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1).to(device)
+        start_embedding = self.start_embedding.to(codes_list.device)
+        middle_embedding = self.middle_embedding.to(codes_list.device)
+        end_embedding = self.end_embedding.to(codes_list.device)
+
+        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, speaker_embedding, audio_embedding, end_embedding], dim=1)
         print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
 
         attention_mask = torch.ones_like(model_inputs, device=device)
