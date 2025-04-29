@@ -114,12 +114,12 @@ def detokenize_codes(tokens):
 
 class SpeakerModelingLM(PreTrainedModel):
     config_class = AutoConfig
-    base_model_prefix = "base_model"
+    base_model_prefix = "model"
 
     def __init__(self, config, **kwargs):
         super().__init__(config)
 
-        self.base_model = AutoModelForCausalLM.from_config(config)
+        self.model = AutoModelForCausalLM.from_config(config)
         self.tokenizer = tokenizer
         self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
         # post init
