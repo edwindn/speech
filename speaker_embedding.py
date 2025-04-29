@@ -9,6 +9,7 @@ from huggingface_hub import login as hf_login, snapshot_download
 import librosa
 from snac import SNAC
 import multiprocessing
+import wandb
 
 load_dotenv()
 
@@ -45,8 +46,10 @@ end = [end_of_audio, end_of_gpt]
 
 # ---------------------- #
 
+# wandb.init(project="speaker-embedding")
+
 hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
-repo_id = "amuvarma/snac_and_embs"
+repo_id = "amuvarma/snac_and_embs" # codes_list, speaker_embedding, text
 snapshot_download(
     repo_id=repo_id,
     repo_type="dataset",
@@ -54,9 +57,6 @@ snapshot_download(
     max_workers=os.cpu_count(),
 ) 
 dataset = load_dataset(repo_id, split="train")
-print(dataset)
-print(dataset[0])
-quit()
 
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
@@ -65,8 +65,8 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
-snac = snac.to(device)
+# snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
+# snac = snac.to(device)
 
 class GatedMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -81,8 +81,8 @@ class GatedMLP(nn.Module):
         return x
     
 
-speaker_embedding_model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
-embed_speaker = Inference(speaker_embedding_model, window="whole")
+# speaker_embedding_model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
+# embed_speaker = Inference(speaker_embedding_model, window="whole")
 
 
 def detokenize_codes(tokens):
@@ -154,16 +154,8 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
 def map_fn(batch):
     audio_tokens = batch["codes_list"]
     text = batch["text"]
+    embedding = batch["speaker_embedding"]
     text_tokens = tokenizer(text).input_ids
-
-    codes = detokenize_codes(audio_tokens)
-    with torch.inference_mode():
-        audio = snac.decode(codes).squeeze(0)
-
-    embedding = embed_speaker({
-        "waveform": audio,
-        "sample_rate": 24000,
-    })
 
     return {
         "input_ids": audio_tokens,
@@ -172,13 +164,8 @@ def map_fn(batch):
     }
 
 dataset = dataset.map(map_fn, batched=False, num_proc=NUM_WORKERS)
-print(dataset)
-print(dataset[0])
-quit()
 
 model = LlamaForSpeakerModeling(config=tokenizer.config)
-
-
 
 
 training_args = TrainingArguments(
@@ -187,6 +174,7 @@ training_args = TrainingArguments(
     num_train_epochs=1,
     logging_dir="logs",
     logging_steps=10,
+    #report_to="wandb",
 )
 
 trainer = Trainer(

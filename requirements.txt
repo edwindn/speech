@@ -6,3 +6,4 @@ snac
 pyannote.audio
 librosa
 trl
+wandb
