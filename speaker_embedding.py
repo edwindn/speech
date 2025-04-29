@@ -134,6 +134,7 @@ class SpeakerModelingLM(PreTrainedModel):
             input_ids: torch.Tensor,
             speaker_embedding: torch.Tensor,
             text: str,
+            **kwargs
         ):
         # input_ids = text + audio
         labels = tokenizer(text)["input_ids"]
@@ -164,11 +165,7 @@ class SpeakerModelingLM(PreTrainedModel):
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name).to(device)
 
-print('dataset: ', dataset)
-
 def collate_fn(batch):
-    print("example keys:", batch[0].keys())
-
     coll = default_data_collator(batch)
     coll["input_ids"] = torch.stack([torch.tensor(b["codes_list"]) for b in batch], dim=0)
     coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
@@ -182,7 +179,7 @@ training_args = TrainingArguments(
     logging_dir="logs",
     logging_steps=10,
     remove_unused_columns=False,
-    #report_to="wandb",
+    report_to="wandb",
 )
 
 trainer = Trainer(
