@@ -123,6 +123,7 @@ class SpeakerModelingLM(PreTrainedModel):
         self.tokenizer = tokenizer
         self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
         self.embedding_layer = self.model.get_input_embeddings()
+        print(f'embedding_layer: {self.embedding_layer.weight.shape}')
         # post init
 
     @classmethod
@@ -143,6 +144,8 @@ class SpeakerModelingLM(PreTrainedModel):
 
         B, A = input_ids.size()
         _, T = labels.size()
+
+        print(f'input_ids: {input_ids.shape}')
 
         speaker_embedding = self.speaker_projection(speaker_embedding)
         audio_embedding = self.embedding_layer(input_ids)
