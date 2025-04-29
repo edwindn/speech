@@ -181,6 +181,7 @@ training_args = TrainingArguments(
     num_train_epochs=1,
     logging_dir="logs",
     logging_steps=10,
+    remove_unused_columns=False,
     #report_to="wandb",
 )
 
