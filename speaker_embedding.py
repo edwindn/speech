@@ -13,7 +13,7 @@ import multiprocessing
 
 load_dotenv()
 
-SPEAKER_EMBEDDING_DIM = 512
+SPEAKER_EMBEDDING_DIM = 192
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
 NUM_WORKERS = os.cpu_count()
@@ -138,7 +138,6 @@ class SpeakerModelingLM(PreTrainedModel):
         ):
         # input_ids = text + audio
         labels = tokenizer(text, return_tensors="pt")["input_ids"]
-        print(f'labels: {labels.shape}')
 
         B, A = input_ids.size()
         _, T = labels.size()
