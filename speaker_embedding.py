@@ -169,7 +169,7 @@ class SpeakerModelingLM(PreTrainedModel):
         model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
         print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
 
-        attention_mask = torch.ones_like(model_inputs)
+        attention_mask = torch.ones_like(model_inputs, device=device)
 
         labels_padded = torch.cat([start, text, middle, torch.tensor([-100], device=device, dtype=text.dtype).repeat(B, 1), codes_list, end], dim=1)
         print(f'labels_padded: {labels_padded.shape}') # 1, T
