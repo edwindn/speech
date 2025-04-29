@@ -10,15 +10,12 @@ import librosa
 from snac import SNAC
 import multiprocessing
 
-# Set multiprocessing start method to 'spawn' for CUDA compatibility
-multiprocessing.set_start_method('spawn', force=True)
-
 load_dotenv()
 
 SPEAKER_EMBEDDING_DIM = 256
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
-NUM_WORKERS = min(os.cpu_count(), 64)
+NUM_WORKERS = 1 # min(os.cpu_count(), 64)
 
 # ---------------------- #
 
