@@ -165,6 +165,12 @@ SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name).to(device)
 
 
+def collate_fn(batch):
+    coll = default_data_collator(batch)
+    coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
+    coll["text"] = [b["text"] for b in batch]
+    return coll
+
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
     per_device_train_batch_size=1,
@@ -178,7 +184,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    data_collator=default_data_collator,
+    data_collator=collate_fn,
 )
 
 print("training")
