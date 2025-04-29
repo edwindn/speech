@@ -138,10 +138,9 @@ class SpeakerModelingLM(PreTrainedModel):
         self.embedding_layer = self.model.get_input_embeddings()
         print(f'embedding_layer: {self.embedding_layer.weight.shape}')
 
-        self.start_embedding = self.embedding_layer(start).unsqueeze(0)
-        self.middle_embedding = self.embedding_layer(middle).unsqueeze(0)
-        self.end_embedding = self.embedding_layer(end).unsqueeze(0)
-        # self.pad_embedding = self.embedding_layer.weight[pad_token].view(1, 1, -1)
+        self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
+        self.register_buffer("middle_tokens", torch.tensor(middle, dtype=torch.long).unsqueeze(0))
+        self.register_buffer("end_tokens", torch.tensor(end, dtype=torch.long).unsqueeze(0))
         # post init
 
     @classmethod
@@ -157,27 +156,27 @@ class SpeakerModelingLM(PreTrainedModel):
             **kwargs
         ):
 
+        device = self.start_tokens.device
         codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
-        # text_tokens = tokenizer(text, return_tensors="pt")["input_ids"].to(device)
-
+    
         B, A = codes_list.size()
 
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(codes_list)
         text_embedding = self.embedding_layer(text)
 
-        start_embedding = self.start_embedding.to(codes_list.device)
-        middle_embedding = self.middle_embedding.to(codes_list.device)
-        end_embedding = self.end_embedding.to(codes_list.device)
+        start_embedding = self.embedding_layer(self.start_tokens.repeat(B, 1))
+        middle_embedding = self.embedding_layer(self.middle_tokens.repeat(B, 1))
+        end_embedding = self.embedding_layer(self.end_tokens.repeat(B, 1))
 
         model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, speaker_embedding, audio_embedding, end_embedding], dim=1)
         print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
 
         attention_mask = torch.ones_like(model_inputs, device=device)
 
-        start_gpu = start.to(model_inputs.device).unsqueeze(0)
-        middle_gpu = middle.to(model_inputs.device).unsqueeze(0)
-        end_gpu = end.to(model_inputs.device).unsqueeze(0)
+        start_gpu = self.start_tokens.repeat(B, 1)
+        middle_gpu = self.middle_tokens.repeat(B, 1)
+        end_gpu = self.end_tokens.repeat(B, 1)
         labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], device=model_inputs.device, dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
         print(f'labels_padded: {labels_padded.shape}') # 1, T
 
@@ -209,7 +208,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    data_collator=default_data_collator,
+    data_collator=collate_fn,
 )
 
 print("training")
