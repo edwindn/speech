@@ -166,7 +166,7 @@ class SpeakerModelingLM(PreTrainedModel):
         audio_embedding = self.embedding_layer(codes_list)
         text_embedding = self.embedding_layer(text)
 
-        model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
+        model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1, device=device)
         print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
 
         attention_mask = torch.ones_like(model_inputs, device=device)
