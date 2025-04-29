@@ -46,7 +46,7 @@ end = [end_of_audio, end_of_gpt]
 # ---------------------- #
 
 hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
-repo_id = "amuvarma/em-EN"
+repo_id = "amuvarma/snac_and_embs"
 snapshot_download(
     repo_id=repo_id,
     repo_type="dataset",
@@ -54,7 +54,9 @@ snapshot_download(
     max_workers=NUM_WORKERS,
 ) 
 dataset = load_dataset(repo_id, split="train")
-
+print(dataset)
+print(dataset[0])
+quit()
 
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
@@ -138,7 +140,7 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         text_mask = torch.ones((B, T), dtype=torch.long, device=audio_embedding.device)
         attention_mask = torch.cat([audio_mask, pad_mask, text_mask], dim=1)
         print(f'attention mask: {attention_mask.shape}')
-        
+
         ignore_audio = torch.full_like(model_inputs, -100, device=model_inputs.device, dtype=labels.dtype)
         labels_padded = torch.cat([ignore_audio, labels], dim=1)
         print(f'labels: {labels_padded.shape}')
