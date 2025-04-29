@@ -138,7 +138,7 @@ class SpeakerModelingLM(PreTrainedModel):
             text: str,
             **kwargs
         ):
-        
+
         # ADD STRUCTURE TOKENS
 
         # input_ids = text + audio
@@ -159,7 +159,7 @@ class SpeakerModelingLM(PreTrainedModel):
         # input_T = model_inputs.size(1)
         # ignore_audio = torch.full((B, input_T), -100, device=device, dtype=labels.dtype)
         # labels_padded = torch.cat([ignore_audio, labels], dim=1)
-        labels_padded = torch.cat([input_ids, torch.tensor([-100], device=device, dtype=labels.dtype).repeat(B, 1), labels], dim=1)
+        labels_padded = torch.cat([input_ids, torch.tensor([-100] * 2, device=device, dtype=labels.dtype).repeat(B, 1), labels], dim=1)
         print(f'labels_padded: {labels_padded.shape}')
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
