@@ -46,6 +46,8 @@ end = [end_of_audio, end_of_gpt]
 
 # ---------------------- #
 
+model_name = "canopylabs/orpheus-3b-0.1-pretrained"
+
 # wandb.init(project="speaker-embedding")
 
 hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
@@ -111,13 +113,16 @@ def detokenize_codes(tokens):
 
 
 class LlamaForSpeakerModeling(AutoModelForCausalLM):
-    def __init__(self):
-
-        self.llama = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3B").to(device)
-        super().__init__(self.llama.config)
-        
-        self.projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM).to(device)
+    def __init__(self, config):
+        super().__init__(config)        
         self.tokenizer = tokenizer
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        model = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        model.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM).to(device)
+        model.forward = cls.forward._get_(model, type(model))
+        return model
 
     def forward(
             self,
@@ -131,7 +136,7 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         B, A = input_ids.size()
         _, T = labels.size()
 
-        speaker_embedding = self.projection(speaker_embedding)
+        speaker_embedding = self.speaker_projection(speaker_embedding)
         audio_embedding = self.llama.embed_tokens(input_ids)
         pad_tensor = torch.ones((B, 1), dtype=torch.long) * pad_token
         model_inputs = torch.cat([audio_embedding, pad_tensor, speaker_embedding], dim=1) # can remove pad tensor
@@ -152,7 +157,7 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         return out.loss, out.logits
 
 
-model = LlamaForSpeakerModeling()
+model = LlamaForSpeakerModeling.from_pretrained(model_name)
 
 
 training_args = TrainingArguments(
