@@ -8,6 +8,10 @@ import os
 from huggingface_hub import login as hf_login, snapshot_download
 import librosa
 from snac import SNAC
+import multiprocessing
+
+# Set multiprocessing start method to 'spawn' for CUDA compatibility
+multiprocessing.set_start_method('spawn', force=True)
 
 load_dotenv()
 
