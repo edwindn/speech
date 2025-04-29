@@ -138,6 +138,9 @@ class SpeakerModelingLM(PreTrainedModel):
             text: str,
             **kwargs
         ):
+        
+        # ADD STRUCTURE TOKENS
+
         # input_ids = text + audio
         input_ids, speaker_embedding = input_ids.to(device), speaker_embedding.to(device)
         labels = tokenizer(text, return_tensors="pt")["input_ids"].to(device)
@@ -147,7 +150,8 @@ class SpeakerModelingLM(PreTrainedModel):
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(input_ids)
         pad_embedding = self.embedding_layer.weight[pad_token].view(1, 1, -1)
-        model_inputs = torch.cat([audio_embedding, speaker_embedding, pad_embedding], dim=1)
+        label_embedding = self.embedding_layer(labels)
+        model_inputs = torch.cat([audio_embedding, pad_embedding, speaker_embedding, label_embedding], dim=1)
         print(f'model_inputs: {model_inputs.shape}')
 
         attention_mask = torch.ones_like(model_inputs)
@@ -194,4 +198,6 @@ trainer.train()
 
 print("saving")
 trainer.push_to_hub("edwindn/llama-voice-cloning")
+
+
 
