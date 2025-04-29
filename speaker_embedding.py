@@ -119,9 +119,9 @@ class SpeakerModelingLM(PreTrainedModel):
     def __init__(self, config, **kwargs):
         super().__init__(config)
 
-        self.base_model = AutoModelForCausalLM.from_config(config).to(device)
+        self.base_model = AutoModelForCausalLM.from_config(config)
         self.tokenizer = tokenizer
-        self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM).to(device)
+        self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
         # post init
 
     def forward(
@@ -157,7 +157,7 @@ class SpeakerModelingLM(PreTrainedModel):
         return out.loss, out.logits
 
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
-model = SpeakerModelingLM.from_pretrained(model_name)
+model = SpeakerModelingLM.from_pretrained(model_name).to(device)
 
 
 training_args = TrainingArguments(
