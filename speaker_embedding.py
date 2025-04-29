@@ -9,7 +9,7 @@ from huggingface_hub import login as hf_login, snapshot_download
 import librosa
 from snac import SNAC
 import multiprocessing
-# import wandb
+import wandb
 
 load_dotenv()
 
@@ -50,7 +50,7 @@ start, middle, end = torch.tensor(start), torch.tensor(middle), torch.tensor(end
 
 model_name = "canopylabs/orpheus-3b-0.1-pretrained"
 
-# wandb.init(project="speaker-embedding")
+wandb.init(project="speaker-embedding")
 
 hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
 repo_id = "amuvarma/snac_and_embs" # codes_list, speaker_embedding, text
@@ -78,7 +78,6 @@ def map_fn(batch):
     return batch
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
-
 
 # snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
 # snac = snac.to(device)
@@ -140,6 +139,10 @@ class SpeakerModelingLM(PreTrainedModel):
         self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
         self.register_buffer("middle_tokens", torch.tensor(middle, dtype=torch.long).unsqueeze(0))
         self.register_buffer("end_tokens", torch.tensor(end, dtype=torch.long).unsqueeze(0))
+
+        self.register_buffer("start_embedding", self.embedding_layer(self.start_tokens))
+        self.register_buffer("middle_embedding", self.embedding_layer(self.middle_tokens))
+        self.register_buffer("end_embedding", self.embedding_layer(self.end_tokens))
         # post init
 
     @classmethod
@@ -154,30 +157,20 @@ class SpeakerModelingLM(PreTrainedModel):
             text: torch.Tensor,
             **kwargs
         ):
-
-        device = self.start_tokens.device
-        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
-    
-        B, A = codes_list.size()
+        B, _ = codes_list.size()
 
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(codes_list)
         text_embedding = self.embedding_layer(text)
 
-        start_embedding = self.embedding_layer(self.start_tokens.repeat(B, 1))
-        middle_embedding = self.embedding_layer(self.middle_tokens.repeat(B, 1))
-        end_embedding = self.embedding_layer(self.end_tokens.repeat(B, 1))
+        model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
 
-        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, speaker_embedding, audio_embedding, end_embedding], dim=1)
-        # print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
-
-        attention_mask = torch.ones_like(model_inputs, device=device)
+        attention_mask = torch.ones_like(model_inputs)
 
         start_gpu = self.start_tokens.repeat(B, 1)
         middle_gpu = self.middle_tokens.repeat(B, 1)
         end_gpu = self.end_tokens.repeat(B, 1)
-        labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], device=model_inputs.device, dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
-        # print(f'labels_padded: {labels_padded.shape}') # 1, T
+        labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
@@ -186,17 +179,11 @@ class SpeakerModelingLM(PreTrainedModel):
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name).to(device)
 
-def collate_fn(batch):
-    coll = default_data_collator(batch)
-    coll["input_ids"] = torch.stack([torch.tensor(b["codes_list"]) for b in batch], dim=0)
-    # coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
-    coll["text"] = torch.stack([torch.tensor(b["text"]) for b in batch], dim=0)
-    return coll
-
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
     per_device_train_batch_size=1,
     num_train_epochs=1,
+    bf16=True,
     logging_dir="logs",
     logging_steps=10,
     remove_unused_columns=False,
@@ -207,7 +194,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    data_collator=collate_fn,
+    data_collator=default_data_collator,
 )
 
 print("training")
