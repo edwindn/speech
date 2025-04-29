@@ -166,6 +166,8 @@ model = SpeakerModelingLM.from_pretrained(model_name).to(device)
 
 
 def collate_fn(batch):
+    print("example keys:", batch[0].keys())
+    
     coll = default_data_collator(batch)
     coll["input_ids"] = torch.stack([torch.tensor(b["codes_list"]) for b in batch], dim=0)
     coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
