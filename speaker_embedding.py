@@ -9,7 +9,7 @@ from huggingface_hub import login as hf_login, snapshot_download
 import librosa
 from snac import SNAC
 import multiprocessing
-import wandb
+# import wandb
 
 load_dotenv()
 
@@ -164,10 +164,11 @@ class SpeakerModelingLM(PreTrainedModel):
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name).to(device)
 
+print('dataset: ', dataset)
 
 def collate_fn(batch):
     print("example keys:", batch[0].keys())
-    
+
     coll = default_data_collator(batch)
     coll["input_ids"] = torch.stack([torch.tensor(b["codes_list"]) for b in batch], dim=0)
     coll["speaker_embedding"] = torch.stack([torch.tensor(b["speaker_embedding"]) for b in batch], dim=0)
