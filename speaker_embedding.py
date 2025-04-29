@@ -151,8 +151,8 @@ def map_fn(batch):
 
     codes = detokenize_codes(audio_tokens)
     with torch.inference_mode():
-        audio = snac.decode(codes)
-    print(audio.shape)
+        audio = snac.decode(codes).squeeze(0)
+
     embedding = embed_speaker({
         "waveform": audio,
         "sample_rate": 24000,
