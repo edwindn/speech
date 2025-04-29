@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, default_data_collator
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, default_data_collator, AutoConfig, PreTrainedModel
 import torch
 import torch.nn as nn
 from pyannote.audio import Model, Inference
@@ -13,10 +13,10 @@ import wandb
 
 load_dotenv()
 
-SPEAKER_EMBEDDING_DIM = 0
+SPEAKER_EMBEDDING_DIM = None
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
-NUM_WORKERS = 1
+NUM_WORKERS = os.cpu_count()
 
 # DE-DUPLICATE CODES
 
@@ -56,7 +56,7 @@ snapshot_download(
     repo_id=repo_id,
     repo_type="dataset",
     revision="main",        
-    max_workers=os.cpu_count(),
+    max_workers=NUM_WORKERS,
 ) 
 dataset = load_dataset(repo_id, split="train")
 
@@ -112,17 +112,17 @@ def detokenize_codes(tokens):
     return codes
 
 
-class LlamaForSpeakerModeling(AutoModelForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)        
-        self.tokenizer = tokenizer
+class SpeakerModelingLM(PreTrainedModel):
+    config_class = AutoConfig
+    base_model_prefix = "base_model"
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        model = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        model.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM).to(device)
-        model.forward = cls.forward._get_(model, type(model))
-        return model
+    def __init__(self, config, **kwargs):
+        super().__init__(config)
+
+        self.base_model = AutoModelForCausalLM.from_config(config).to(device)
+        self.tokenizer = tokenizer
+        self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM).to(device)
+        # post init
 
     def forward(
             self,
@@ -137,7 +137,7 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         _, T = labels.size()
 
         speaker_embedding = self.speaker_projection(speaker_embedding)
-        audio_embedding = self.llama.embed_tokens(input_ids)
+        audio_embedding = self.model.embed_tokens(input_ids)
         pad_tensor = torch.ones((B, 1), dtype=torch.long) * pad_token
         model_inputs = torch.cat([audio_embedding, pad_tensor, speaker_embedding], dim=1) # can remove pad tensor
         print(f'model_inputs: {model_inputs.shape}')
@@ -152,12 +152,12 @@ class LlamaForSpeakerModeling(AutoModelForCausalLM):
         labels_padded = torch.cat([ignore_audio, labels], dim=1)
         print(f'labels: {labels_padded.shape}')
 
-        out = self.llama(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
+        out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
         return out.loss, out.logits
 
-
-model = LlamaForSpeakerModeling.from_pretrained(model_name)
+SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
+model = SpeakerModelingLM.from_pretrained(model_name)
 
 
 training_args = TrainingArguments(
