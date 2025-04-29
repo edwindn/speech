@@ -137,7 +137,8 @@ class SpeakerModelingLM(PreTrainedModel):
             **kwargs
         ):
         # input_ids = text + audio
-        labels = tokenizer(text)["input_ids"]
+        labels = tokenizer(text, return_tensors="pt")["input_ids"]
+        print(f'labels: {labels.shape}')
 
         B, A = input_ids.size()
         _, T = labels.size()
