@@ -113,7 +113,7 @@ def detokenize_codes(tokens):
 class LlamaForSpeakerModeling(AutoModelForCausalLM):
     def __init__(self):
 
-        self.llama = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-3B").to(device)
+        self.llama = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3B").to(device)
         super().__init__(self.llama.config)
         
         self.projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM).to(device)
