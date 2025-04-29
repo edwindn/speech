@@ -157,6 +157,10 @@ class SpeakerModelingLM(PreTrainedModel):
             text: torch.Tensor,
             **kwargs
         ):
+
+        device = self.start_tokens.device
+        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
+    
         B, _ = codes_list.size()
 
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
@@ -165,12 +169,12 @@ class SpeakerModelingLM(PreTrainedModel):
 
         model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
 
-        attention_mask = torch.ones_like(model_inputs)
+        attention_mask = torch.ones_like(model_inputs, device=device)
 
         start_gpu = self.start_tokens.repeat(B, 1)
         middle_gpu = self.middle_tokens.repeat(B, 1)
         end_gpu = self.end_tokens.repeat(B, 1)
-        labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
+        labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], device=model_inputs.device, dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
@@ -194,7 +198,6 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    data_collator=default_data_collator,
 )
 
 print("training")
