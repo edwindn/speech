@@ -136,7 +136,7 @@ class SpeakerModelingLM(PreTrainedModel):
             text: str,
         ):
         # input_ids = text + audio
-        labels = tokenizer(text).input_ids
+        labels = tokenizer(text)["input_ids"]
 
         B, A = input_ids.size()
         _, T = labels.size()
