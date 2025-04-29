@@ -94,7 +94,6 @@ class GatedMLP(nn.Module):
         x = torch.relu(x)
         x = self.fc2(x)
         return x
-    
 
 # speaker_embedding_model = Model.from_pretrained("pyannote/embedding")
 # embed_speaker = Inference(speaker_embedding_model, window="whole")
@@ -170,7 +169,7 @@ class SpeakerModelingLM(PreTrainedModel):
         end_embedding = self.embedding_layer(self.end_tokens.repeat(B, 1))
 
         model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, speaker_embedding, audio_embedding, end_embedding], dim=1)
-        print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
+        # print(f'model_inputs: {model_inputs.shape}') # 1, T, 3072
 
         attention_mask = torch.ones_like(model_inputs, device=device)
 
@@ -178,7 +177,7 @@ class SpeakerModelingLM(PreTrainedModel):
         middle_gpu = self.middle_tokens.repeat(B, 1)
         end_gpu = self.end_tokens.repeat(B, 1)
         labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], device=model_inputs.device, dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
-        print(f'labels_padded: {labels_padded.shape}') # 1, T
+        # print(f'labels_padded: {labels_padded.shape}') # 1, T
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
