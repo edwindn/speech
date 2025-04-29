@@ -139,24 +139,24 @@ class SpeakerModelingLM(PreTrainedModel):
         ):
         # input_ids = text + audio
         input_ids, speaker_embedding = input_ids.to(device), speaker_embedding.to(device)
-        labels = tokenizer(text, return_tensors="pt")["input_ids"]
+        labels = tokenizer(text, return_tensors="pt")["input_ids"].to(device)
 
         B, A = input_ids.size()
         _, T = labels.size()
 
         speaker_embedding = self.speaker_projection(speaker_embedding)
         audio_embedding = self.embedding_layer(input_ids)
-        pad_tensor = torch.ones((B, 1), dtype=torch.long) * pad_token
+        pad_tensor = torch.ones((B, 1), dtype=torch.long, device=device) * pad_token
         model_inputs = torch.cat([audio_embedding, pad_tensor, speaker_embedding], dim=1) # can remove pad tensor
         print(f'model_inputs: {model_inputs.shape}')
 
-        audio_mask = torch.ones((B, A), dtype=torch.long, device=audio_embedding.device)
-        pad_mask = torch.ones((B, 1), dtype=torch.long, device=audio_embedding.device)
-        text_mask = torch.ones((B, T), dtype=torch.long, device=audio_embedding.device)
+        audio_mask = torch.ones((B, A), dtype=torch.long, device=device)
+        pad_mask = torch.ones((B, 1), dtype=torch.long, device=device)
+        text_mask = torch.ones((B, T), dtype=torch.long, device=device)
         attention_mask = torch.cat([audio_mask, pad_mask, text_mask], dim=1)
         print(f'attention mask: {attention_mask.shape}')
 
-        ignore_audio = torch.full_like(model_inputs, -100, device=model_inputs.device, dtype=labels.dtype)
+        ignore_audio = torch.full_like(model_inputs, -100, device=device, dtype=labels.dtype)
         labels_padded = torch.cat([ignore_audio, labels], dim=1)
         print(f'labels: {labels_padded.shape}')
 
