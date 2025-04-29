@@ -15,7 +15,7 @@ load_dotenv()
 SPEAKER_EMBEDDING_DIM = 256
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
-NUM_WORKERS = 1 # min(os.cpu_count(), 64)
+NUM_WORKERS = 1
 
 # DE-DUPLICATE CODES
 
@@ -51,7 +51,7 @@ snapshot_download(
     repo_id=repo_id,
     repo_type="dataset",
     revision="main",        
-    max_workers=NUM_WORKERS,
+    max_workers=os.cpu_count(),
 ) 
 dataset = load_dataset(repo_id, split="train")
 print(dataset)
