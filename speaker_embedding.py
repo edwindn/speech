@@ -223,6 +223,13 @@ class SpeakerModelingLM(PreTrainedModel):
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name)
 
+# Print model layers and exit
+print("\nModel Layers:")
+for name, module in model.named_modules():
+    if len(list(module.children())) == 0:  # Only print leaf modules
+        print(f"{name}: {type(module).__name__}")
+print("\nExiting after printing model layers...")
+exit()
 
 class ClearCacheCallback(TrainerCallback):
     def __init__(self, n_steps=250):
