@@ -153,13 +153,12 @@ class SpeakerModelingLM(PreTrainedModel):
     def forward(
             self,
             codes_list: torch.Tensor, # audio
-            speaker_embedding: torch.Tensor,
             text: torch.Tensor,
             **kwargs
         ):
 
         device = next(self.parameters()).device
-        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
+        codes_list, text = codes_list.to(device), text.to(device)
     
         B, _ = codes_list.size()
 
@@ -167,18 +166,16 @@ class SpeakerModelingLM(PreTrainedModel):
         middle_embedding = self.embedding_layer(self.middle_tokens.to(device))
         end_embedding    = self.embedding_layer(self.end_tokens.to(device))
 
-        speaker_projection = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(codes_list)
         text_embedding = self.embedding_layer(text)
 
-        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, speaker_projection, audio_embedding, end_embedding], dim=1)
+        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, audio_embedding, end_embedding], dim=1)
 
         start_ids  = self.start_tokens.repeat(B, 1).to(device)
         middle_ids = self.middle_tokens.repeat(B, 1).to(device)
         end_ids    = self.end_tokens.repeat(B, 1).to(device)
-        pad_idx = torch.full((B, 1), -100, dtype=text.dtype, device=device)
 
-        labels = torch.cat([start_ids, text, middle_ids, pad_idx, codes_list, end_ids], dim=1)
+        labels = torch.cat([start_ids, text, middle_ids, codes_list, end_ids], dim=1)
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
             print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
