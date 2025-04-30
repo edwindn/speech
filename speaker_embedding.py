@@ -76,16 +76,11 @@ def map_fn(batch):
 class ProjectionLayer(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
         self.linear = nn.Linear(input_dim, output_dim, bias=False)
 
     def forward(self, x):
         return self.linear(x)
-        x = self.fc1(x)
-        x = torch.relu(x)
-        x = self.fc2(x)
-        return x 
+    
 
 class SpeakerModelingLM(PreTrainedModel):
     config_class = AutoConfig
@@ -117,49 +112,28 @@ class SpeakerModelingLM(PreTrainedModel):
         shard_paths = sorted(glob.glob(pattern))
 
         if not shard_paths:
-            # fallback to single-file
             shard_paths = [os.path.join(ckpt_dir, "pytorch_model.bin")]
 
-        # 3) load & merge
         raw_state = {}
         for shard in shard_paths:
             sd = torch.load(shard, map_location="cpu")
             raw_state.update(sd)
 
-        # 4) (Optional) Rename keys if your checkpoint was saved under "model.model.*"
         fixed_state = {}
         for k, v in raw_state.items():
             if k.startswith("model.model."):
-                # strip the accidental double‐prefix
                 new_k = k.replace("model.model.", "model.", 1)
             else:
                 new_k = k
             fixed_state[new_k] = v
+        
+        fixed_state["lm_head.weight"] = raw_state["model.lm_head.weight"]
 
-        # 5) Load into the empty LM
         missing, unexpected = base_model.load_state_dict(fixed_state, strict=False)
         print(">>> base_model loaded. missing:", missing)
         print(">>>                unexpected:", unexpected)
 
         return cls(config, base_model)
-        
-        # Rename weights before creating instance
-        state_dict = model.state_dict()
-        new_state_dict = {}
-        for key, value in state_dict.items():
-            if key.startswith('model.model.'):
-                new_key = key.replace('model.model.', 'model.', 1)
-            else:
-                new_key = key
-            new_state_dict[new_key] = value
-
-        missing, unexpected = model.load_state_dict(new_state_dict, strict=False)
-        print(f"Missing: {missing}")
-        print(f"Unexpected: {unexpected}")
-        
-        instance = cls(model.config, model)
-            
-        return instance
     
     @torch.no_grad()
     def generate(
