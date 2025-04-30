@@ -51,7 +51,9 @@ start, middle, end = torch.tensor(start), torch.tensor(middle), torch.tensor(end
 
 model_name = "canopylabs/orpheus-3b-0.1-pretrained"
 
-wandb.init(project="speaker-embedding")
+# Only initialize wandb on the master GPU
+if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0]:
+    wandb.init(project="speaker-embedding")
 
 # hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
 
@@ -155,7 +157,7 @@ class SpeakerModelingLM_OLD(PreTrainedModel):
 
     def forward(
             self,
-            codes_list: torch.Tensor, # audio
+            codes_list: torch.Tensor, # audio
             speaker_embedding: torch.Tensor,
             text: torch.Tensor,
             **kwargs
