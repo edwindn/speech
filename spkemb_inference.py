@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from dotenv import load_dotenv
 import os
 from pyannote.audio import Model, Inference
+from speaker_embedding import SpeakerModelingLM
 
 load_dotenv()
 
@@ -82,6 +83,11 @@ def detokenize_codes(tokens):
     return codes
 
 if __name__ == "__main__":
+    model = SpeakerModelingLM.from_pretrained(model_name).eval()
+
+
+    exit()
+    
     model = AutoModelForCausalLM.from_pretrained(model_name).eval()
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)

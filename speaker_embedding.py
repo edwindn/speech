@@ -234,8 +234,7 @@ class SpeakerModelingLM(PreTrainedModel):
         return out.loss, out.logits
 
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
-# model = SpeakerModelingLM.from_pretrained(model_name)
-model = SpeakerModelingLM.from_pretrained("llama-voice-cloning/checkpoint-10000")
+model = SpeakerModelingLM.from_pretrained(model_name)
 
 # Print model layers and exit
 print("\nModel Layers:")
