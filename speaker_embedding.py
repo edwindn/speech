@@ -82,7 +82,8 @@ def map_fn(batch):
     text_tokens = tokenizer(text).input_ids
 
     audio_tokens = batch["codes_list"]
-    c0 = audio_tokens[:, ::7]
+    audio_tokens = torch.tensor(audio_tokens)
+    c0 = audio_tokens[::7]
     indices = torch.where(c0[:-1] == c0[1:])[0]
     if len(indices) > 0:
         mask_indices = (indices.unsqueeze(1) * 7 + torch.arange(7, device=indices.device)).flatten()
@@ -91,7 +92,7 @@ def map_fn(batch):
         audio_tokens = audio_tokens[mask]
 
     batch["text"] = text_tokens
-    batch["codes_list"] = audio_tokens
+    batch["codes_list"] = audio_tokens.tolist()
     return batch
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
