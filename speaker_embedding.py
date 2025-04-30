@@ -192,10 +192,9 @@ class SpeakerModelingLM(PreTrainedModel):
     config_class = AutoConfig
     base_model_prefix = ""
 
-    def __init__(self, config, model, tokenizer):
+    def __init__(self, config, model):
         super().__init__(config)
         self.model = model
-        self.tokenizer = tokenizer
 
         # projection from speaker to LM embed-dim
         self.speaker_projection = GatedMLP(
@@ -222,12 +221,12 @@ class SpeakerModelingLM(PreTrainedModel):
         )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, tokenizer, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         model = AutoModelForCausalLM.from_pretrained(
             pretrained_model_name_or_path, **kwargs
         )
         config = model.config
-        return cls(config, model, tokenizer)
+        return cls(config, model)
 
     def forward(
         self,
