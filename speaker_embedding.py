@@ -54,34 +54,6 @@ end = [end_of_audio, end_of_gpt]
 
 # ---------------------- #
 
-model_name = "canopylabs/orpheus-3b-0.1-pretrained"
-
-# Only initialize wandb on the master GPU
-if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0]:
-    wandb.init(project="speaker-embedding")
-
-# hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
-
-repo_id = "amuvarma/snac_and_embs" # codes_list, speaker_embedding, text
-snapshot_download(
-    repo_id=repo_id,
-    repo_type="dataset",
-    revision="main",        
-    max_workers=NUM_WORKERS,
-) 
-dataset = load_dataset(repo_id, split="train")
-
-dataset = dataset.select(range(len(dataset) // 10))
-dataset = dataset.shuffle(seed=42)
-print(f'len dataset: {len(dataset)}')
-
-# hf_login(os.getenv("HF_TOKEN_EDWIN"))
-
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-
 def map_fn(batch):
     text = batch["text"]
     text_tokens = tokenizer(text).input_ids
@@ -99,8 +71,6 @@ def map_fn(batch):
     batch["text"] = text_tokens
     batch["codes_list"] = audio_tokens.tolist()
     return batch
-
-dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
 
 class ProjectionLayer(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -232,58 +202,92 @@ class SpeakerModelingLM(PreTrainedModel):
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels, return_dict=True)
 
         return out.loss, out.logits
+    
 
-SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
-model = SpeakerModelingLM.from_pretrained(model_name)
 
-# Print model layers and exit
-print("\nModel Layers:")
-for name, module in list(model.named_modules())[:10]:
-    if len(list(module.children())) == 0:  # Only print leaf modules
-        print(f"{name}: {type(module).__name__}")
-print("\nExiting after printing model layers...")
-exit()
+if __name__ == "__main__":
+    model_name = "canopylabs/orpheus-3b-0.1-pretrained"
 
-class ClearCacheCallback(TrainerCallback):
-    def __init__(self, n_steps=10):
-        self.n_steps = n_steps
-        self.step = 0
+    # Only initialize wandb on the master GPU
+    if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0]:
+        wandb.init(project="speaker-embedding")
 
-    def on_step_end(self, args, state, control, **kwargs):
-        if state.global_step % self.n_steps == 0:
-            gc.collect()
-            torch.cuda.empty_cache()
-            if "model" in kwargs and hasattr(kwargs["model"], "trainer"):
-                kwargs["model"].trainer.accelerator.clear()
+    # hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
 
-training_args = TrainingArguments(
-    output_dir="model-for-voice-cloning",
-    per_device_train_batch_size=1,
-    gradient_accumulation_steps=1,
-    learning_rate=2e-5,
-    num_train_epochs=1,
-    save_steps=10000,
-    bf16=True,
-    logging_dir="logs",
-    logging_steps=1,
-    remove_unused_columns=False,
-    report_to="wandb" if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0] else None,
-    dataloader_num_workers=4,
-    optim="adamw_torch_fused",
-    save_safetensors=False,
-)
+    repo_id = "amuvarma/snac_and_embs" # codes_list, speaker_embedding, text
+    snapshot_download(
+        repo_id=repo_id,
+        repo_type="dataset",
+        revision="main",        
+        max_workers=NUM_WORKERS,
+    ) 
+    dataset = load_dataset(repo_id, split="train")
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=dataset,
-    callbacks=[ClearCacheCallback()],
-    #data_collator=collate_fn,
-)
+    dataset = dataset.select(range(len(dataset) // 10))
+    dataset = dataset.shuffle(seed=42)
+    print(f'len dataset: {len(dataset)}')
 
-print("training")
-trainer.train()
+    dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
 
-print("saving")
-trainer.push_to_hub("edwindn/model-for-voice-cloning", safe_serialization=False)
+    # hf_login(os.getenv("HF_TOKEN_EDWIN"))
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+
+    SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
+    model = SpeakerModelingLM.from_pretrained(model_name)
+
+    # Print model layers and exit
+    print("\nModel Layers:")
+    for name, module in list(model.named_modules())[:10]:
+        if len(list(module.children())) == 0:  # Only print leaf modules
+            print(f"{name}: {type(module).__name__}")
+    print("\nExiting after printing model layers...")
+    exit()
+
+    class ClearCacheCallback(TrainerCallback):
+        def __init__(self, n_steps=10):
+            self.n_steps = n_steps
+            self.step = 0
+
+        def on_step_end(self, args, state, control, **kwargs):
+            if state.global_step % self.n_steps == 0:
+                gc.collect()
+                torch.cuda.empty_cache()
+                if "model" in kwargs and hasattr(kwargs["model"], "trainer"):
+                    kwargs["model"].trainer.accelerator.clear()
+
+    training_args = TrainingArguments(
+        output_dir="model-for-voice-cloning",
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=1,
+        learning_rate=2e-5,
+        num_train_epochs=1,
+        save_steps=10000,
+        bf16=True,
+        logging_dir="logs",
+        logging_steps=1,
+        remove_unused_columns=False,
+        report_to="wandb" if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0] else None,
+        dataloader_num_workers=4,
+        optim="adamw_torch_fused",
+        save_safetensors=False,
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=dataset,
+        callbacks=[ClearCacheCallback()],
+        #data_collator=collate_fn,
+    )
+
+    print("training")
+    trainer.train()
+
+    print("saving")
+    trainer.push_to_hub("edwindn/model-for-voice-cloning", safe_serialization=False)
 
