@@ -320,6 +320,7 @@ training_args = TrainingArguments(
     logging_steps=1,
     remove_unused_columns=False,
     report_to="wandb" if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0] else None,
+    save_safetensors=False
 )
 
 trainer = Trainer(
