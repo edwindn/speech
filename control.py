@@ -73,7 +73,7 @@ print(f'len dataset: {len(dataset)}')
 
 # hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
