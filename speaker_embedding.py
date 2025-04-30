@@ -11,6 +11,7 @@ from snac import SNAC
 import multiprocessing
 import wandb
 import gc
+import glob
 
 torch.backends.cudnn.benchmark = False
 
@@ -111,8 +112,19 @@ class SpeakerModelingLM(PreTrainedModel):
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         base_model = AutoModelForCausalLM.from_config(config)
 
-        ckpt_file = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
-        raw_state = torch.load(ckpt_file, map_location="cpu")
+        ckpt_dir    = pretrained_model_name_or_path
+        pattern     = os.path.join(ckpt_dir, "pytorch_model-*.bin")
+        shard_paths = sorted(glob.glob(pattern))
+
+        if not shard_paths:
+            # fallback to single-file
+            shard_paths = [os.path.join(ckpt_dir, "pytorch_model.bin")]
+
+        # 3) load & merge
+        raw_state = {}
+        for shard in shard_paths:
+            sd = torch.load(shard, map_location="cpu")
+            raw_state.update(sd)
 
         # 4) (Optional) Rename keys if your checkpoint was saved under "model.model.*"
         fixed_state = {}
