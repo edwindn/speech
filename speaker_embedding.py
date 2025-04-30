@@ -126,7 +126,7 @@ def detokenize_codes(tokens):
     return codes
 
 
-class SpeakerModelingLM(PreTrainedModel):
+class SpeakerModelingLM_OLD(PreTrainedModel):
     config_class = AutoConfig
     base_model_prefix = ""
 
@@ -182,6 +182,121 @@ class SpeakerModelingLM(PreTrainedModel):
         labels_padded = torch.cat([start_gpu, text, middle_gpu, pad_idx, codes_list, end_gpu], dim=1)
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
+
+        return out.loss, out.logits
+    
+
+
+
+class SpeakerModelingLM(PreTrainedModel):
+    config_class = AutoConfig
+    base_model_prefix = ""
+
+    def __init__(self, config, model, tokenizer):
+        super().__init__(config)
+        self.model = model
+        self.tokenizer = tokenizer
+
+        # projection from speaker to LM embed-dim
+        self.speaker_projection = GatedMLP(
+            in_features=SPEAKER_EMBEDDING_DIM,
+            hidden_features=768,
+            out_features=LLAMA_EMBEDDING_DIM,
+        )
+
+        # reuse the LM's embedding layer
+        self.embedding_layer = self.model.get_input_embeddings()
+
+        # only register token-ID buffers here
+        self.register_buffer(
+            "start_tokens",
+            torch.tensor(start, dtype=torch.long).unsqueeze(0),
+        )
+        self.register_buffer(
+            "middle_tokens",
+            torch.tensor(middle, dtype=torch.long).unsqueeze(0),
+        )
+        self.register_buffer(
+            "end_tokens",
+            torch.tensor(end, dtype=torch.long).unsqueeze(0),
+        )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, tokenizer, **kwargs):
+        model = AutoModelForCausalLM.from_pretrained(
+            pretrained_model_name_or_path, **kwargs
+        )
+        config = model.config
+        return cls(config, model, tokenizer)
+
+    def forward(
+        self,
+        codes_list: torch.Tensor,       # audio token IDs
+        speaker_embedding: torch.Tensor,
+        text: torch.Tensor,
+        **kwargs
+    ):
+        # figure out exactly where the Trainer put our model
+        device = next(self.parameters()).device
+
+        # move inputs onto that device
+        codes_list        = codes_list.to(device)
+        speaker_embedding = speaker_embedding.to(device)
+        text              = text.to(device)
+
+        B, _ = codes_list.size()
+
+        # recompute the special embeddings on-the-fly
+        start_emb  = self.embedding_layer(self.start_tokens.to(device))
+        middle_emb = self.embedding_layer(self.middle_tokens.to(device))
+        end_emb    = self.embedding_layer(self.end_tokens.to(device))
+
+        # project speaker and embed audio/text
+        spk_proj       = self.speaker_projection(speaker_embedding).unsqueeze(1)
+        audio_emb      = self.embedding_layer(codes_list)
+        text_emb       = self.embedding_layer(text)
+
+        # concatenate everything
+        model_inputs = torch.cat([
+            start_emb,
+            text_emb,
+            middle_emb,
+            spk_proj,
+            audio_emb,
+            end_emb,
+        ], dim=1)
+
+        # build attention mask
+        attention_mask = torch.ones(
+            model_inputs.size(0),
+            model_inputs.size(1),
+            dtype=torch.long,
+            device=device,
+        )
+
+        # build labels (with padding −100 where we don't predict)
+        start_ids  = self.start_tokens.repeat(B, 1).to(device)
+        middle_ids = self.middle_tokens.repeat(B, 1).to(device)
+        end_ids    = self.end_tokens.repeat(B, 1).to(device)
+        pad_idx    = torch.full(
+            (B, 1), -100, dtype=text.dtype, device=device
+        )
+        labels = torch.cat([
+            start_ids,
+            text,
+            middle_ids,
+            pad_idx,
+            codes_list,
+            end_ids,
+        ], dim=1)
+
+        # forward through the LM
+        out = self.model(
+            inputs_embeds=model_inputs,
+            attention_mask=attention_mask,
+            labels=labels,
+            return_dict=True,
+        )
 
         return out.loss, out.logits
 
