@@ -196,12 +196,16 @@ model = SpeakerModelingLM.from_pretrained(model_name)
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
     per_device_train_batch_size=1,
+    gradient_accumulation_steps=1,
+    learning_rate=1e-5,
     num_train_epochs=1,
     bf16=True,
     logging_dir="logs",
     logging_steps=1,
     remove_unused_columns=False,
     report_to="wandb" if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0] else None,
+    dataloader_num_workers=4,
+    optim="adamw_torch_fused",
 )
 
 trainer = Trainer(
