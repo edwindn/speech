@@ -126,72 +126,10 @@ def detokenize_codes(tokens):
     assert all(c < snac_vocab_size for c in codes[1][0]), "snac1 must be less than snac_vocab_size"
     assert all(c < snac_vocab_size for c in codes[2][0]), "snac2 must be less than snac_vocab_size"
 
-    return codes
+    return codes    
 
 
 class SpeakerModelingLM_OLD(PreTrainedModel):
-    config_class = AutoConfig
-    base_model_prefix = ""
-
-    def __init__(self, config, model):
-        super().__init__(config)
-
-        self.model = model
-        self.tokenizer = tokenizer
-        self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
-        self.embedding_layer = self.model.get_input_embeddings()
-
-        self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
-        self.register_buffer("middle_tokens", torch.tensor(middle, dtype=torch.long).unsqueeze(0))
-        self.register_buffer("end_tokens", torch.tensor(end, dtype=torch.long).unsqueeze(0))
-
-        self.register_buffer("start_embedding", self.embedding_layer(self.start_tokens))
-        self.register_buffer("middle_embedding", self.embedding_layer(self.middle_tokens))
-        self.register_buffer("end_embedding", self.embedding_layer(self.end_tokens))
-        # post init
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        return cls(model.config, model)
-
-    def forward(
-            self,
-            codes_list: torch.Tensor, # audio
-            speaker_embedding: torch.Tensor,
-            text: torch.Tensor,
-            **kwargs
-        ):
-
-        device = self.start_tokens.device
-        print(f'forward using device: {device}')
-        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
-    
-        B, _ = codes_list.size()
-
-        speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1).to(device)
-        audio_embedding = self.embedding_layer(codes_list).to(device)
-        text_embedding = self.embedding_layer(text).to(device)
-
-        model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
-
-        # attention_mask = torch.ones_like(model_inputs)
-        attention_mask = torch.ones(model_inputs.size(0), model_inputs.size(1), dtype=torch.long, device=model_inputs.device)
-
-        start_gpu = self.start_tokens.repeat(B, 1)
-        middle_gpu = self.middle_tokens.repeat(B, 1)
-        end_gpu = self.end_tokens.repeat(B, 1)
-        pad_idx = torch.full((B, 1), -100, dtype=text.dtype, device=model_inputs.device)
-        labels_padded = torch.cat([start_gpu, text, middle_gpu, pad_idx, codes_list, end_gpu], dim=1)
-
-        out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
-
-        return out.loss, out.logits
-    
-
-
-
-class SpeakerModelingLM(PreTrainedModel):
     config_class = AutoConfig
     base_model_prefix = ""
 
@@ -302,6 +240,72 @@ class SpeakerModelingLM(PreTrainedModel):
         )
 
         return out.loss, out.logits
+
+
+
+
+class SpeakerModelingLM(PreTrainedModel):
+    config_class = AutoConfig
+    base_model_prefix = ""
+
+    def __init__(self, config, model):
+        super().__init__(config)
+
+        self.model = model
+
+        self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
+        self.embedding_layer = self.model.get_input_embeddings()
+
+        self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
+        self.register_buffer("middle_tokens", torch.tensor(middle, dtype=torch.long).unsqueeze(0))
+        self.register_buffer("end_tokens", torch.tensor(end, dtype=torch.long).unsqueeze(0))
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        return cls(model.config, model)
+
+    def forward(
+            self,
+            codes_list: torch.Tensor, # audio
+            speaker_embedding: torch.Tensor,
+            text: torch.Tensor,
+            **kwargs
+        ):
+
+        device = next(self.parameters()).device
+        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
+    
+        B, _ = codes_list.size()
+
+        start_embedding  = self.embedding_layer(self.start_tokens.to(device))
+        middle_embedding = self.embedding_layer(self.middle_tokens.to(device))
+        end_embedding    = self.embedding_layer(self.end_tokens.to(device))
+
+        speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
+        audio_embedding = self.embedding_layer(codes_list)
+        text_embedding = self.embedding_layer(text)
+
+        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, speaker_embedding, audio_embedding, end_embedding], dim=1)
+
+        start_ids  = self.start_tokens.repeat(B, 1).to(device)
+        middle_ids = self.middle_tokens.repeat(B, 1).to(device)
+        end_ids    = self.end_tokens.repeat(B, 1).to(device)
+        pad_idx    = torch.full((B, 1), -100, dtype=text.dtype, device=device)
+
+        labels = torch.cat([start_ids, text, middle_ids, pad_idx, codes_list, end_ids], dim=1)
+
+        if model_inputs.size(1) > MAX_SEQ_LENGTH:
+            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
+            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
+            labels = labels[:, :MAX_SEQ_LENGTH]
+
+        attention_mask = torch.ones(model_inputs.size(0), model_inputs.size(1), dtype=torch.long, device=device)
+
+        out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels, return_dict=True)
+
+        return out.loss, out.logits
+
 
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name)
