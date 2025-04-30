@@ -329,5 +329,5 @@ print("training")
 trainer.train()
 
 print("saving")
-trainer.push_to_hub("edwindn/llama-voice-cloning")
+trainer.push_to_hub("edwindn/llama-voice-cloning", safe_serialization=False)
 
