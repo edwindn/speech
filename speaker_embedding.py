@@ -108,7 +108,28 @@ class SpeakerModelingLM(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        base_model = AutoModelForCausalLM.from_config(config)
+
+        ckpt_file = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
+        raw_state = torch.load(ckpt_file, map_location="cpu")
+
+        # 4) (Optional) Rename keys if your checkpoint was saved under "model.model.*"
+        fixed_state = {}
+        for k, v in raw_state.items():
+            if k.startswith("model.model."):
+                # strip the accidental double‐prefix
+                new_k = k.replace("model.model.", "model.", 1)
+            else:
+                new_k = k
+            fixed_state[new_k] = v
+
+        # 5) Load into the empty LM
+        missing, unexpected = base_model.load_state_dict(fixed_state, strict=False)
+        print(">>> base_model loaded. missing:", missing)
+        print(">>>                unexpected:", unexpected)
+
+        return cls(config, base_model)
         
         # Rename weights before creating instance
         state_dict = model.state_dict()
