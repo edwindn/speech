@@ -173,6 +173,10 @@ class SpeakerModelingLM_OLD(PreTrainedModel):
 
         model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
 
+        if model_inputs.size(1) > MAX_SEQ_LENGTH:
+            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
+            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
+
         # attention_mask = torch.ones_like(model_inputs)
         attention_mask = torch.ones(model_inputs.size(0), model_inputs.size(1), dtype=torch.long, device=model_inputs.device)
 
@@ -301,34 +305,6 @@ SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name)
 
 
-def collate_fn(batch):
-    max_length = MAX_SEQ_LENGTH
-    truncated_count = 0
-    total_tokens_removed = 0
-    
-    input_ids = []
-    attention_mask = []
-    
-    for item in batch:
-        original_length = len(item["input_ids"])
-        if original_length > max_length:
-            truncated_count += 1
-            total_tokens_removed += original_length - max_length
-        
-        input_ids.append(item["input_ids"][:max_length])
-        attention_mask.append(item["attention_mask"][:max_length])
-    
-    if truncated_count > 0:
-        print(f"Batch stats: {truncated_count} sequences truncated, {total_tokens_removed} tokens removed")
-
-    assert len(input_ids) <= MAX_SEQ_LENGTH
-    
-    return {
-        "input_ids": torch.tensor(input_ids, dtype=torch.long),
-        "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
-        "labels": torch.tensor(input_ids, dtype=torch.long)
-    }
-
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
     per_device_train_batch_size=1,
@@ -344,7 +320,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    data_collator=collate_fn,
+    #data_collator=collate_fn,
 )
 
 print("training")
