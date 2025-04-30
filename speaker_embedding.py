@@ -315,7 +315,7 @@ training_args = TrainingArguments(
     logging_dir="logs",
     logging_steps=10,
     remove_unused_columns=False,
-    report_to="wandb",
+    report_to="wandb" if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0] else None,
 )
 
 trainer = Trainer(
