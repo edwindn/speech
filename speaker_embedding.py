@@ -125,21 +125,6 @@ class SpeakerModelingLM(PreTrainedModel):
         print(f"Unexpected: {unexpected}")
         
         instance = cls(model.config, model)
-        
-        # Print first 10 weight names from loaded model
-        print("\nFirst 10 weight names from loaded model:")
-        loaded_weights = list(model.state_dict().keys())[:10]
-        for name in loaded_weights:
-            print(f"Loaded: {name}")
-            
-        # Load weights with prefix correction
-        instance.load_weights(model.state_dict())
-        
-        # Print first 10 weight names after loading
-        print("\nFirst 10 weight names after loading:")
-        final_weights = list(instance.state_dict().keys())[:10]
-        for name in final_weights:
-            print(f"Final: {name}")
             
         return instance
     
