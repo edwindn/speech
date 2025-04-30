@@ -81,8 +81,13 @@ print(f"Using device: {device}")
 def map_fn(batch):
     text = batch["text"]
     text_tokens = tokenizer(text).input_ids
-    batch["text"] = text_tokens
-    return batch
+    audio_tokens = batch["codes_list"]
+    tokens = start + text_tokens + middle + audio_tokens + end
+    return {
+        "input_ids": tokens,
+        "attention_mask": [1] * len(tokens),
+        "labels": tokens.copy()
+    }
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
 
