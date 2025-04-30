@@ -109,8 +109,8 @@ class SpeakerModelingLM(PreTrainedModel):
     def load_weights(self, state_dict):
         new_state_dict = {}
         for key, value in state_dict.items():
-            if key.startswith('model.model.'):
-                new_key = key.replace('model.model.', 'model.')
+            if key.startswith('model.'):
+                new_key = key.replace('model.', 'model.model.')
                 new_state_dict[new_key] = value
             else:
                 new_state_dict[key] = value
