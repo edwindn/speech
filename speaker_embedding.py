@@ -198,9 +198,9 @@ class SpeakerModelingLM(PreTrainedModel):
 
         # projection from speaker to LM embed-dim
         self.speaker_projection = GatedMLP(
-            in_features=SPEAKER_EMBEDDING_DIM,
-            hidden_features=768,
-            out_features=LLAMA_EMBEDDING_DIM,
+            input_dim=SPEAKER_EMBEDDING_DIM,
+            hidden_dim=768,
+            output_dim=LLAMA_EMBEDDING_DIM,
         )
 
         # reuse the LM's embedding layer
