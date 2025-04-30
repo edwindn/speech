@@ -55,6 +55,8 @@ end = [end_of_audio, end_of_gpt]
 
 # ---------------------- #
 
+tokenizer = AutoTokenizer.from_pretrained("canopylabs/orpheus-3b-0.1-pretrained")
+
 def map_fn(batch):
     text = batch["text"]
     text_tokens = tokenizer(text).input_ids
