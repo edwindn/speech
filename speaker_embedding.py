@@ -106,16 +106,6 @@ class SpeakerModelingLM(PreTrainedModel):
         self.end_of_audio = end_of_audio
         self.max_new_tokens = 250 * 7
 
-    def load_weights(self, state_dict):
-        new_state_dict = {}
-        for key, value in state_dict.items():
-            if key.startswith('model.'):
-                new_key = key.replace('model.', 'model.model.')
-                new_state_dict[new_key] = value
-            else:
-                new_state_dict[key] = value
-        return self.load_state_dict(new_state_dict, strict=False)
-
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -124,12 +114,15 @@ class SpeakerModelingLM(PreTrainedModel):
         state_dict = model.state_dict()
         new_state_dict = {}
         for key, value in state_dict.items():
-            if key.startswith('model.'):
-                new_key = key.replace('model.', 'model.model.')
-                new_state_dict[new_key] = value
+            if key.startswith('model.model.'):
+                new_key = key.replace('model.model.', 'model.', 1)
             else:
-                new_state_dict[key] = value
-        model.load_state_dict(new_state_dict)
+                new_key = key
+            new_state_dict[new_key] = value
+
+        missing, unexpected = model.load_state_dict(new_state_dict, strict=False)
+        print(f"Missing: {missing}")
+        print(f"Unexpected: {unexpected}")
         
         instance = cls(model.config, model)
         
