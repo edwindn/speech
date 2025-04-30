@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, default_data_collator, AutoConfig, PreTrainedModel
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, default_data_collator, AutoConfig, PreTrainedModel, TrainerCallback
 import torch
 import torch.nn as nn
 from pyannote.audio import Model, Inference
@@ -10,6 +10,9 @@ import librosa
 from snac import SNAC
 import multiprocessing
 import wandb
+import gc
+
+torch.backends.cudnn.benchmark = False
 
 load_dotenv()
 
@@ -39,13 +42,15 @@ end_of_audio = llama_token_end + 2
 
 pad_token = llama_token_end + 7
 
+start_of_speaker = llama_token_end + 8
+end_of_speaker = llama_token_end + 9
+
 audio_token_start = llama_token_end + 10
 
 start = [start_of_human]
-middle = [end_of_text, end_of_human, start_of_gpt, start_of_audio]
+middle1 = [end_of_text, end_of_human, start_of_speaker]
+middle2 = [end_of_speaker, start_of_gpt, start_of_audio]
 end = [end_of_audio, end_of_gpt]
-
-start, middle, end = torch.tensor(start), torch.tensor(middle), torch.tensor(end)
 
 # ---------------------- #
 
@@ -105,7 +110,7 @@ class ProjectionLayer(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
-        self.linear = nn.Linear(input_dim, output_dim)
+        self.linear = nn.Linear(input_dim, output_dim, bias=False)
 
     def forward(self, x):
         return self.linear(x)
@@ -155,7 +160,8 @@ class SpeakerModelingLM(PreTrainedModel):
         self.embedding_layer = self.model.get_input_embeddings()
 
         self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
-        self.register_buffer("middle_tokens", torch.tensor(middle, dtype=torch.long).unsqueeze(0))
+        self.register_buffer("middle_tokens_1", torch.tensor(middle1, dtype=torch.long).unsqueeze(0))
+        self.register_buffer("middle_tokens_2", torch.tensor(middle2, dtype=torch.long).unsqueeze(0))
         self.register_buffer("end_tokens", torch.tensor(end, dtype=torch.long).unsqueeze(0))
 
     @classmethod
@@ -177,21 +183,24 @@ class SpeakerModelingLM(PreTrainedModel):
         B, _ = codes_list.size()
 
         start_embedding  = self.embedding_layer(self.start_tokens.to(device))
-        middle_embedding = self.embedding_layer(self.middle_tokens.to(device))
+        middle_embedding_1 = self.embedding_layer(self.middle_tokens_1.to(device))
+        middle_embedding_2 = self.embedding_layer(self.middle_tokens_2.to(device))
         end_embedding    = self.embedding_layer(self.end_tokens.to(device))
 
         speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
         audio_embedding = self.embedding_layer(codes_list)
         text_embedding = self.embedding_layer(text)
 
-        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, speaker_embedding, audio_embedding, end_embedding], dim=1)
+        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding_1,
+                                  speaker_embedding, middle_embedding_2, audio_embedding, end_embedding], dim=1)
 
         start_ids  = self.start_tokens.repeat(B, 1).to(device)
-        middle_ids = self.middle_tokens.repeat(B, 1).to(device)
+        middle_ids_1 = self.middle_tokens_1.repeat(B, 1).to(device)
+        middle_ids_2 = self.middle_tokens_2.repeat(B, 1).to(device)
         end_ids    = self.end_tokens.repeat(B, 1).to(device)
         pad_idx    = torch.full((B, 1), -100, dtype=text.dtype, device=device)
 
-        labels = torch.cat([start_ids, text, middle_ids, pad_idx, codes_list, end_ids], dim=1)
+        labels = torch.cat([start_ids, text, middle_ids_1, pad_idx, middle_ids_2, codes_list, end_ids], dim=1)
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
             print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
@@ -204,17 +213,29 @@ class SpeakerModelingLM(PreTrainedModel):
 
         return out.loss, out.logits
 
-
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name)
 
+
+class ClearCacheCallback(TrainerCallback):
+    def __init__(self, n_steps=250):
+        self.n_steps = n_steps
+        self.step = 0
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step % self.n_steps == 0:
+            gc.collect()
+            torch.cuda.empty_cache()
+            if "model" in kwargs and hasattr(kwargs["model"], "trainer"):
+                kwargs["model"].trainer.accelerator.clear()
 
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
-    learning_rate=5e-6,
+    learning_rate=2e-5,
     num_train_epochs=1,
+    save_steps=10000,
     bf16=True,
     logging_dir="logs",
     logging_steps=1,
@@ -229,6 +250,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
+    #callbacks=[ClearCacheCallback()],
     #data_collator=collate_fn,
 )
 
