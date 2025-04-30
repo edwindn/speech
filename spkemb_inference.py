@@ -96,6 +96,7 @@ if __name__ == "__main__":
     speaker_model = Model.from_pretrained("pyannote/embedding")
     embed_speaker = Inference(speaker_model)
     speaker_embedding = embed_speaker(ref_audio)
+    speaker_embedding = torch.from_numpy(speaker_embedding.data).to(device)
     print('speaker embedding ', speaker_embedding.shape)
 
     output_tokens = model.generate(text=sample_text, speaker_embedding=speaker_embedding)
