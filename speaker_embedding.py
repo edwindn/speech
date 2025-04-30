@@ -127,14 +127,15 @@ class SpeakerModelingLM(PreTrainedModel):
         for name in loaded_weights:
             print(f"Loaded: {name}")
             
-        # Print first 10 weight names from instance
-        print("\nFirst 10 weight names from instance:")
-        instance_weights = list(instance.state_dict().keys())[:10]
-        for name in instance_weights:
-            print(f"Instance: {name}")
-            
         # Load weights with prefix correction
         instance.load_weights(model.state_dict())
+        
+        # Print first 10 weight names after loading
+        print("\nFirst 10 weight names after loading:")
+        final_weights = list(instance.state_dict().keys())[:10]
+        for name in final_weights:
+            print(f"Final: {name}")
+            
         return instance
     
     @torch.no_grad()
