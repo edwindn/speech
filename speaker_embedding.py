@@ -119,6 +119,18 @@ class SpeakerModelingLM(PreTrainedModel):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        
+        # Rename weights before creating instance
+        state_dict = model.state_dict()
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith('model.'):
+                new_key = key.replace('model.', 'model.model.')
+                new_state_dict[new_key] = value
+            else:
+                new_state_dict[key] = value
+        model.load_state_dict(new_state_dict)
+        
         instance = cls(model.config, model)
         
         # Print first 10 weight names from loaded model
