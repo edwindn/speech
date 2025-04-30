@@ -94,9 +94,7 @@ if __name__ == "__main__":
     ref_audio = "reconstructed_audio.wav"
 
     sample_text = "Hey, this is a test of voice cloning. I wonder if I sound the same as the original?"
-    # speaker_model = Model.from_pretrained("pyannote/embedding")
-    # embed_speaker = Inference(speaker_model)
-    # speaker_embedding = embed_speaker(ref_audio)
+
     from speechbrain.inference.speaker import EncoderClassifier
     sclassifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
     signal, fs = torchaudio.load(ref_audio)

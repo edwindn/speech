@@ -135,7 +135,14 @@ class SpeakerModelingLM(PreTrainedModel):
         print(">>> base_model loaded. missing:", missing)
         print(">>>                unexpected:", unexpected)
 
-        return cls(config, base_model)
+        instance = cls(config, base_model)
+
+        proj_keys = [k for k in instance.state_dict().keys() if k.startswith("speaker_projection.")]
+        print("=== speaker_projection keys ===")
+        for k in proj_keys:
+            print(" •", k)
+
+        return instance
     
     @torch.no_grad()
     def generate(
