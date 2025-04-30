@@ -158,8 +158,8 @@ class SpeakerModelingLM(PreTrainedModel):
             **kwargs
         ):
 
-        device = self.start_tokens.device
-        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
+        # device = self.start_tokens.device
+        # codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
     
         B, _ = codes_list.size()
 
@@ -169,19 +169,20 @@ class SpeakerModelingLM(PreTrainedModel):
 
         model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
 
-        attention_mask = torch.ones_like(model_inputs, device=device)
+        # attention_mask = torch.ones_like(model_inputs)
+        attention_mask = torch.ones(model_inputs.size(0), model_inputs.size(1), dtype=torch.long)
 
         start_gpu = self.start_tokens.repeat(B, 1)
         middle_gpu = self.middle_tokens.repeat(B, 1)
         end_gpu = self.end_tokens.repeat(B, 1)
-        labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], device=model_inputs.device, dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
+        labels_padded = torch.cat([start_gpu, text, middle_gpu, torch.tensor([[-100]], dtype=text.dtype).repeat(B, 1), codes_list, end_gpu], dim=1)
 
         out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels_padded, return_dict=True)
 
         return out.loss, out.logits
 
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
-model = SpeakerModelingLM.from_pretrained(model_name).to(device)
+model = SpeakerModelingLM.from_pretrained(model_name)
 
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
