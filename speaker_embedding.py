@@ -161,13 +161,14 @@ class SpeakerModelingLM(PreTrainedModel):
         ):
 
         device = self.start_tokens.device
+        print(f'forward using device: {device}')
         codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
     
         B, _ = codes_list.size()
 
-        speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
-        audio_embedding = self.embedding_layer(codes_list)
-        text_embedding = self.embedding_layer(text)
+        speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1).to(device)
+        audio_embedding = self.embedding_layer(codes_list).to(device)
+        text_embedding = self.embedding_layer(text).to(device)
 
         model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
 
