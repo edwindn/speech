@@ -263,19 +263,6 @@ class SpeakerModelingLM(PreTrainedModel):
             end_emb,
         ], dim=1)
 
-        if model_inputs.size(1) > MAX_SEQ_LENGTH:
-            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
-            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
-
-        # build attention mask
-        attention_mask = torch.ones(
-            model_inputs.size(0),
-            model_inputs.size(1),
-            dtype=torch.long,
-            device=device,
-        )
-
-        # build labels (with padding −100 where we don't predict)
         start_ids  = self.start_tokens.repeat(B, 1).to(device)
         middle_ids = self.middle_tokens.repeat(B, 1).to(device)
         end_ids    = self.end_tokens.repeat(B, 1).to(device)
@@ -290,6 +277,19 @@ class SpeakerModelingLM(PreTrainedModel):
             codes_list,
             end_ids,
         ], dim=1)
+
+        if model_inputs.size(1) > MAX_SEQ_LENGTH:
+            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
+            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
+            labels = labels[:, :MAX_SEQ_LENGTH]
+
+        # build attention mask
+        attention_mask = torch.ones(
+            model_inputs.size(0),
+            model_inputs.size(1),
+            dtype=torch.long,
+            device=device,
+        )
 
         # forward through the LM
         out = self.model(
