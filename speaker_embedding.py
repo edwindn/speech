@@ -173,10 +173,6 @@ class SpeakerModelingLM_OLD(PreTrainedModel):
 
         model_inputs = torch.cat([self.start_embedding, text_embedding, self.middle_embedding, speaker_embedding, audio_embedding, self.end_embedding], dim=1)
 
-        if model_inputs.size(1) > MAX_SEQ_LENGTH:
-            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
-            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
-
         # attention_mask = torch.ones_like(model_inputs)
         attention_mask = torch.ones(model_inputs.size(0), model_inputs.size(1), dtype=torch.long, device=model_inputs.device)
 
@@ -266,6 +262,10 @@ class SpeakerModelingLM(PreTrainedModel):
             audio_emb,
             end_emb,
         ], dim=1)
+
+        if model_inputs.size(1) > MAX_SEQ_LENGTH:
+            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
+            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
 
         # build attention mask
         attention_mask = torch.ones(
