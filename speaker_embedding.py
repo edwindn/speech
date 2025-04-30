@@ -120,6 +120,19 @@ class SpeakerModelingLM(PreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
         instance = cls(model.config, model)
+        
+        # Print first 10 weight names from loaded model
+        print("\nFirst 10 weight names from loaded model:")
+        loaded_weights = list(model.state_dict().keys())[:10]
+        for name in loaded_weights:
+            print(f"Loaded: {name}")
+            
+        # Print first 10 weight names from instance
+        print("\nFirst 10 weight names from instance:")
+        instance_weights = list(instance.state_dict().keys())[:10]
+        for name in instance_weights:
+            print(f"Instance: {name}")
+            
         # Load weights with prefix correction
         instance.load_weights(model.state_dict())
         return instance
