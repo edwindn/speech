@@ -238,7 +238,7 @@ model = SpeakerModelingLM.from_pretrained(model_name)
 
 # Print model layers and exit
 print("\nModel Layers:")
-for name, module in model.named_modules()[:10]:
+for name, module in list(model.named_modules())[:10]:
     if len(list(module.children())) == 0:  # Only print leaf modules
         print(f"{name}: {type(module).__name__}")
 print("\nExiting after printing model layers...")
