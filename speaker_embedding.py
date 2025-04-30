@@ -17,6 +17,7 @@ SPEAKER_EMBEDDING_DIM = 192
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
 NUM_WORKERS = os.cpu_count()
+MAX_SEQ_LENGTH = 4096
 
 # DE-DUPLICATE CODES
 
@@ -196,17 +197,14 @@ class SpeakerModelingLM(PreTrainedModel):
         super().__init__(config)
         self.model = model
 
-        # projection from speaker to LM embed-dim
         self.speaker_projection = GatedMLP(
             input_dim=SPEAKER_EMBEDDING_DIM,
             hidden_dim=768,
             output_dim=LLAMA_EMBEDDING_DIM,
         )
 
-        # reuse the LM's embedding layer
         self.embedding_layer = self.model.get_input_embeddings()
 
-        # only register token-ID buffers here
         self.register_buffer(
             "start_tokens",
             torch.tensor(start, dtype=torch.long).unsqueeze(0),
@@ -302,6 +300,35 @@ class SpeakerModelingLM(PreTrainedModel):
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
 model = SpeakerModelingLM.from_pretrained(model_name)
 
+
+def collate_fn(batch):
+    max_length = MAX_SEQ_LENGTH
+    truncated_count = 0
+    total_tokens_removed = 0
+    
+    input_ids = []
+    attention_mask = []
+    
+    for item in batch:
+        original_length = len(item["input_ids"])
+        if original_length > max_length:
+            truncated_count += 1
+            total_tokens_removed += original_length - max_length
+        
+        input_ids.append(item["input_ids"][:max_length])
+        attention_mask.append(item["attention_mask"][:max_length])
+    
+    if truncated_count > 0:
+        print(f"Batch stats: {truncated_count} sequences truncated, {total_tokens_removed} tokens removed")
+
+    assert len(input_ids) <= MAX_SEQ_LENGTH
+    
+    return {
+        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+        "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+        "labels": torch.tensor(input_ids, dtype=torch.long)
+    }
+
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
     per_device_train_batch_size=1,
@@ -317,6 +344,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
+    data_collator=collate_fn,
 )
 
 print("training")
