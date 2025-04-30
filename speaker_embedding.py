@@ -62,7 +62,8 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 
-dataset = dataset.select(range(10000))
+dataset = dataset.select(range(len(dataset) // 10))
+print(f'len dataset: {len(dataset)}')
 
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
@@ -134,7 +135,6 @@ class SpeakerModelingLM(PreTrainedModel):
         self.tokenizer = tokenizer
         self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
         self.embedding_layer = self.model.get_input_embeddings()
-        print(f'embedding_layer: {self.embedding_layer.weight.shape}')
 
         self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
         self.register_buffer("middle_tokens", torch.tensor(middle, dtype=torch.long).unsqueeze(0))
@@ -158,8 +158,8 @@ class SpeakerModelingLM(PreTrainedModel):
             **kwargs
         ):
 
-        # device = self.start_tokens.device
-        # codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
+        device = self.start_tokens.device
+        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
     
         B, _ = codes_list.size()
 
@@ -207,6 +207,4 @@ trainer.train()
 
 print("saving")
 trainer.push_to_hub("edwindn/llama-voice-cloning")
-
-
 
