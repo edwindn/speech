@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 from pyannote.audio import Model, Inference
 from speaker_embedding import SpeakerModelingLM
+import torchaudio
 
 load_dotenv()
 
@@ -93,10 +94,13 @@ if __name__ == "__main__":
     ref_audio = "reconstructed_audio.wav"
 
     sample_text = "Hey, this is a test of voice cloning. I wonder if I sound the same as the original?"
-    speaker_model = Model.from_pretrained("pyannote/embedding")
-    embed_speaker = Inference(speaker_model)
-    speaker_embedding = embed_speaker(ref_audio)
-    speaker_embedding = torch.from_numpy(speaker_embedding.data).to(device)
+    # speaker_model = Model.from_pretrained("pyannote/embedding")
+    # embed_speaker = Inference(speaker_model)
+    # speaker_embedding = embed_speaker(ref_audio)
+    from speechbrain.inference.speaker import EncoderClassifier
+    sclassifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
+    signal, fs = torchaudio.load(ref_audio)
+    speaker_embedding = sclassifier.encode_batch(signal)
     print('speaker embedding ', speaker_embedding.shape)
 
     output_tokens = model.generate(text=sample_text, speaker_embedding=speaker_embedding)
