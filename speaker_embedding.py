@@ -66,9 +66,8 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 
-# dataset = dataset.select(range(len(dataset) // 10))
+dataset = dataset.select(range(len(dataset) // 10))
 dataset = dataset.shuffle(seed=42)
-dataset = dataset.select(range(10000))
 print(f'len dataset: {len(dataset)}')
 
 # hf_login(os.getenv("HF_TOKEN_EDWIN"))
@@ -81,7 +80,18 @@ print(f"Using device: {device}")
 def map_fn(batch):
     text = batch["text"]
     text_tokens = tokenizer(text).input_ids
+
+    audio_tokens = batch["codes_list"]
+    c0 = audio_tokens[:, ::7]
+    indices = torch.where(c0[:-1] == c0[1:])[0]
+    if len(indices) > 0:
+        mask_indices = (indices.unsqueeze(1) * 7 + torch.arange(7, device=indices.device)).flatten()
+        mask = torch.ones(len(audio_tokens), dtype=torch.bool, device=audio_tokens.device)
+        mask[mask_indices] = False
+        audio_tokens = audio_tokens[mask]
+
     batch["text"] = text_tokens
+    batch["codes_list"] = audio_tokens
     return batch
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
@@ -89,13 +99,15 @@ dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
 # snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
 # snac = snac.to(device)
 
-class GatedMLP(nn.Module):
+class ProjectionLayer(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.linear = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
+        return self.linear(x)
         x = self.fc1(x)
         x = torch.relu(x)
         x = self.fc2(x)
@@ -129,121 +141,6 @@ def detokenize_codes(tokens):
     return codes    
 
 
-class SpeakerModelingLM_OLD(PreTrainedModel):
-    config_class = AutoConfig
-    base_model_prefix = ""
-
-    def __init__(self, config, model):
-        super().__init__(config)
-        self.model = model
-
-        self.speaker_projection = GatedMLP(
-            input_dim=SPEAKER_EMBEDDING_DIM,
-            hidden_dim=768,
-            output_dim=LLAMA_EMBEDDING_DIM,
-        )
-
-        self.embedding_layer = self.model.get_input_embeddings()
-
-        self.register_buffer(
-            "start_tokens",
-            torch.tensor(start, dtype=torch.long).unsqueeze(0),
-        )
-        self.register_buffer(
-            "middle_tokens",
-            torch.tensor(middle, dtype=torch.long).unsqueeze(0),
-        )
-        self.register_buffer(
-            "end_tokens",
-            torch.tensor(end, dtype=torch.long).unsqueeze(0),
-        )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        model = AutoModelForCausalLM.from_pretrained(
-            pretrained_model_name_or_path, **kwargs
-        )
-        config = model.config
-        return cls(config, model)
-
-    def forward(
-        self,
-        codes_list: torch.Tensor,       # audio token IDs
-        speaker_embedding: torch.Tensor,
-        text: torch.Tensor,
-        **kwargs
-    ):
-        # figure out exactly where the Trainer put our model
-        device = next(self.parameters()).device
-
-        # move inputs onto that device
-        codes_list        = codes_list.to(device)
-        speaker_embedding = speaker_embedding.to(device)
-        text              = text.to(device)
-
-        B, _ = codes_list.size()
-
-        # recompute the special embeddings on-the-fly
-        start_emb  = self.embedding_layer(self.start_tokens.to(device))
-        middle_emb = self.embedding_layer(self.middle_tokens.to(device))
-        end_emb    = self.embedding_layer(self.end_tokens.to(device))
-
-        # project speaker and embed audio/text
-        spk_proj       = self.speaker_projection(speaker_embedding).unsqueeze(1)
-        audio_emb      = self.embedding_layer(codes_list)
-        text_emb       = self.embedding_layer(text)
-
-        # concatenate everything
-        model_inputs = torch.cat([
-            start_emb,
-            text_emb,
-            middle_emb,
-            spk_proj,
-            audio_emb,
-            end_emb,
-        ], dim=1)
-
-        start_ids  = self.start_tokens.repeat(B, 1).to(device)
-        middle_ids = self.middle_tokens.repeat(B, 1).to(device)
-        end_ids    = self.end_tokens.repeat(B, 1).to(device)
-        pad_idx    = torch.full(
-            (B, 1), -100, dtype=text.dtype, device=device
-        )
-        labels = torch.cat([
-            start_ids,
-            text,
-            middle_ids,
-            pad_idx,
-            codes_list,
-            end_ids,
-        ], dim=1)
-
-        if model_inputs.size(1) > MAX_SEQ_LENGTH:
-            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
-            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
-            labels = labels[:, :MAX_SEQ_LENGTH]
-
-        # build attention mask
-        attention_mask = torch.ones(
-            model_inputs.size(0),
-            model_inputs.size(1),
-            dtype=torch.long,
-            device=device,
-        )
-
-        # forward through the LM
-        out = self.model(
-            inputs_embeds=model_inputs,
-            attention_mask=attention_mask,
-            labels=labels,
-            return_dict=True,
-        )
-
-        return out.loss, out.logits
-
-
-
-
 class SpeakerModelingLM(PreTrainedModel):
     config_class = AutoConfig
     base_model_prefix = ""
@@ -253,7 +150,7 @@ class SpeakerModelingLM(PreTrainedModel):
 
         self.model = model
 
-        self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
+        self.speaker_projection = ProjectionLayer(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
         self.embedding_layer = self.model.get_input_embeddings()
 
         self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
@@ -314,13 +211,17 @@ model = SpeakerModelingLM.from_pretrained(model_name)
 training_args = TrainingArguments(
     output_dir="llama-voice-cloning",
     per_device_train_batch_size=1,
+    gradient_accumulation_steps=1,
+    learning_rate=5e-6,
     num_train_epochs=1,
     bf16=True,
     logging_dir="logs",
     logging_steps=1,
     remove_unused_columns=False,
     report_to="wandb" if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0] else None,
-    save_safetensors=False
+    dataloader_num_workers=4,
+    optim="adamw_torch_fused",
+    save_safetensors=False,
 )
 
 trainer = Trainer(
