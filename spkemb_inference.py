@@ -83,6 +83,7 @@ def detokenize_codes(tokens):
 
 if __name__ == "__main__":
     model = AutoModelForCausalLM.from_pretrained(model_name).eval()
+    
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
     snac = snac.to(device)

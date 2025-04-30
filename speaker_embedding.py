@@ -136,10 +136,23 @@ class SpeakerModelingLM(PreTrainedModel):
         self.end_of_audio = end_of_audio
         self.max_new_tokens = 250 * 7
 
+    def load_weights(self, state_dict):
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith('model.model.'):
+                new_key = key.replace('model.model.', 'model.')
+                new_state_dict[new_key] = value
+            else:
+                new_state_dict[key] = value
+        return self.load_state_dict(new_state_dict, strict=False)
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        return cls(model.config, model)
+        instance = cls(model.config, model)
+        # Load weights with prefix correction
+        instance.load_weights(model.state_dict())
+        return instance
     
     @torch.no_grad()
     def generate(
