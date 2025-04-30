@@ -45,8 +45,6 @@ start = [start_of_human]
 middle = [end_of_text, end_of_human, start_of_gpt, start_of_audio]
 end = [end_of_audio, end_of_gpt]
 
-start, middle, end = torch.tensor(start), torch.tensor(middle), torch.tensor(end)
-
 # ---------------------- #
 
 model_name = "canopylabs/orpheus-3b-0.1-pretrained"
