@@ -52,7 +52,8 @@ model_name = "canopylabs/orpheus-3b-0.1-pretrained"
 
 wandb.init(project="speaker-embedding")
 
-hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
+# hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
+
 repo_id = "amuvarma/snac_and_embs" # codes_list, speaker_embedding, text
 snapshot_download(
     repo_id=repo_id,
@@ -67,7 +68,7 @@ dataset = dataset.shuffle(seed=42)
 dataset = dataset.select(range(1000))
 print(f'len dataset: {len(dataset)}')
 
-hf_login(os.getenv("HF_TOKEN_EDWIN"))
+# hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
 
