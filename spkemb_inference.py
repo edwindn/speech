@@ -1,0 +1,104 @@
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch.nn as nn
+from typing import Optional
+from snac import SNAC
+import numpy as np
+from scipy.io.wavfile import write
+import torch.nn.functional as F
+from dotenv import load_dotenv
+import os
+from pyannote.audio import Model, Inference
+
+load_dotenv()
+
+SPEAKER_EMBEDDING_DIM = 192
+LLAMA_EMBEDDING_DIM = 3072
+AUDIO_EMBEDDING_SR = 16000
+NUM_WORKERS = os.cpu_count()
+MAX_SEQ_LENGTH = 2048
+SNAC_SAMPLE_RATE = 24000
+
+# DE-DUPLICATE CODES
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# model_name = "edwindn/llama-voice-cloning"
+model_name = "llama-voice-cloning/checkpoint-10000"
+
+# ---------------------- #
+
+llama_token_end = 128256
+snac_vocab_size = 4096
+start_of_text = 128000
+end_of_text = 128009
+
+start_of_human = llama_token_end + 3
+end_of_human = llama_token_end + 4
+
+start_of_gpt = llama_token_end + 5
+end_of_gpt = llama_token_end + 6
+
+start_of_audio = llama_token_end + 1
+end_of_audio = llama_token_end + 2
+
+pad_token = llama_token_end + 7
+
+start_of_speaker = llama_token_end + 8
+end_of_speaker = llama_token_end + 9
+
+audio_token_start = llama_token_end + 10
+
+start = [start_of_human]
+middle1 = [end_of_text, end_of_human, start_of_speaker]
+middle2 = [end_of_speaker, start_of_gpt, start_of_audio]
+end = [end_of_audio, end_of_gpt]
+
+# ---------------------- #
+
+def detokenize_codes(tokens):
+    assert len(tokens) % 7 == 0, "Token length must be divisible by 7"
+    tokens = torch.tensor(tokens, device=device).reshape(-1, 7) - audio_token_start
+
+    snac0 = tokens[:, 0].unsqueeze(0)
+    snac1 = torch.stack([
+        tokens[:, 1] - snac_vocab_size,
+        tokens[:, 4] - snac_vocab_size * 4
+    ], dim=1).flatten().unsqueeze(0)
+    snac2 = torch.stack([
+        tokens[:, 2] - snac_vocab_size * 2,
+        tokens[:, 3] - snac_vocab_size * 3,
+        tokens[:, 5] - snac_vocab_size * 5,
+        tokens[:, 6] - snac_vocab_size * 6
+    ], dim=1).flatten().unsqueeze(0)
+
+    codes = [snac0, snac1, snac2]
+
+    assert all(c < snac_vocab_size for c in codes[0][0]), "snac0 must be less than snac_vocab_size"
+    assert all(c < snac_vocab_size for c in codes[1][0]), "snac1 must be less than snac_vocab_size"
+    assert all(c < snac_vocab_size for c in codes[2][0]), "snac2 must be less than snac_vocab_size"
+
+    return codes
+
+if __name__ == "__main__":
+    model = AutoModelForCausalLM.from_pretrained(model_name).eval()
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
+    snac = snac.to(device)
+
+    ref_audio = "reconstructed_audio.wav"
+
+    sample_text = "Hey, this is a test of voice cloning. I wonder if I sound the same as the original?"
+    speaker_model = Model.from_pretrained("pyannote/embedding")
+    embed_speaker = Inference(speaker_model)
+    speaker_embedding = embed_speaker(ref_audio)
+    print('speaker embedding ', speaker_embedding.shape)
+
+    output_tokens = model.generate(text=sample_text, speaker_embedding=speaker_embedding)
+    codes = detokenize_codes(output_tokens)
+    with torch.inference_mode():
+            reconstructed_audio = snac.decode(codes)
+    
+    audio = reconstructed_audio.squeeze().cpu().numpy()
+    write("spkemb_reconstructed_audio.wav", SNAC_SAMPLE_RATE, audio)

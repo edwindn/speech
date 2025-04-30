@@ -77,7 +77,7 @@ print(f'len dataset: {len(dataset)}')
 
 # hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -102,9 +102,6 @@ def map_fn(batch):
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
 
-# snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
-# snac = snac.to(device)
-
 class ProjectionLayer(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
@@ -117,35 +114,7 @@ class ProjectionLayer(nn.Module):
         x = self.fc1(x)
         x = torch.relu(x)
         x = self.fc2(x)
-        return x
-
-# speaker_embedding_model = Model.from_pretrained("pyannote/embedding")
-# embed_speaker = Inference(speaker_embedding_model, window="whole")
-
-def detokenize_codes(tokens):
-    assert len(tokens) % 7 == 0, "Token length must be divisible by 7"
-    tokens = torch.tensor(tokens, device=device).reshape(-1, 7) - audio_token_start
-
-    snac0 = tokens[:, 0].unsqueeze(0)
-    snac1 = torch.stack([
-        tokens[:, 1] - snac_vocab_size,
-        tokens[:, 4] - snac_vocab_size * 4
-    ], dim=1).flatten().unsqueeze(0)
-    snac2 = torch.stack([
-        tokens[:, 2] - snac_vocab_size * 2,
-        tokens[:, 3] - snac_vocab_size * 3,
-        tokens[:, 5] - snac_vocab_size * 5,
-        tokens[:, 6] - snac_vocab_size * 6
-    ], dim=1).flatten().unsqueeze(0)
-
-    codes = [snac0, snac1, snac2]
-
-    assert all(c < snac_vocab_size for c in codes[0][0]), "snac0 must be less than snac_vocab_size"
-    assert all(c < snac_vocab_size for c in codes[1][0]), "snac1 must be less than snac_vocab_size"
-    assert all(c < snac_vocab_size for c in codes[2][0]), "snac2 must be less than snac_vocab_size"
-
-    return codes    
-
+        return x 
 
 class SpeakerModelingLM(PreTrainedModel):
     config_class = AutoConfig
@@ -164,10 +133,48 @@ class SpeakerModelingLM(PreTrainedModel):
         self.register_buffer("middle_tokens_2", torch.tensor(middle2, dtype=torch.long).unsqueeze(0))
         self.register_buffer("end_tokens", torch.tensor(end, dtype=torch.long).unsqueeze(0))
 
+        self.end_of_audio = end_of_audio
+        self.max_new_tokens = 250 * 7
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls(model.config, model)
+    
+    @torch.no_grad()
+    def generate(
+        self,
+        text: str,
+        speaker_embedding: torch.Tensor,
+        **kwargs
+    ):
+        
+        text_tokens = tokenizer(text).input_ids
+        input_ids_1 = [start_of_human] + text_tokens + [end_of_text, end_of_human, start_of_speaker]
+        input_ids_2 = [end_of_speaker, start_of_gpt, start_of_audio]
+        input_ids_1 = torch.tensor(input_ids_1, dtype=torch.long).unsqueeze(0).to(self.device)
+        input_ids_2 = torch.tensor(input_ids_2, dtype=torch.long).unsqueeze(0).to(self.device)
+        embds_1 = self.embedding_layer(input_ids_1)
+        embds_2 = self.embedding_layer(input_ids_2)
+
+        inputs_embeds = torch.cat([embds_1, speaker_embedding, embds_2], dim=1)
+        attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=device)
+
+        output_tokens =  self.model.generate(
+            inputs_embeds=inputs_embeds, # make sure skip embed step
+            attention_mask=attention_mask,
+            **kwargs
+        )
+
+        start_audio_idx = (output_tokens[0] == start_of_audio).nonzero(as_tuple=True)[0]
+        output_tokens = output_tokens[0][start_audio_idx + 1:].tolist()
+        print('output_tokens length:', len(output_tokens))
+
+        if output_tokens[-1] == end_of_audio:
+            output_tokens = output_tokens[:-1]
+
+        assert len(output_tokens) % 7 == 0, "Token length must be divisible by 7"
+        return output_tokens
 
     def forward(
             self,
