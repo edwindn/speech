@@ -13,9 +13,6 @@ from speaker_embedding import SpeakerModelingLM
 
 load_dotenv()
 
-# Disable wandb logging
-os.environ["WANDB_DISABLED"] = "true"
-
 
 SPEAKER_EMBEDDING_DIM = 192
 LLAMA_EMBEDDING_DIM = 3072
