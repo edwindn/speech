@@ -62,7 +62,9 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 
-dataset = dataset.select(range(len(dataset) // 10))
+# dataset = dataset.select(range(len(dataset) // 10))
+dataset = dataset.shuffle(seed=42)
+dataset = dataset.select(range(1000))
 print(f'len dataset: {len(dataset)}')
 
 hf_login(os.getenv("HF_TOKEN_EDWIN"))
@@ -97,7 +99,6 @@ class GatedMLP(nn.Module):
 
 # speaker_embedding_model = Model.from_pretrained("pyannote/embedding")
 # embed_speaker = Inference(speaker_embedding_model, window="whole")
-
 
 def detokenize_codes(tokens):
     assert len(tokens) % 7 == 0, "Token length must be divisible by 7"
