@@ -234,7 +234,8 @@ class SpeakerModelingLM(PreTrainedModel):
         return out.loss, out.logits
 
 SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
-model = SpeakerModelingLM.from_pretrained(model_name)
+# model = SpeakerModelingLM.from_pretrained(model_name)
+model = SpeakerModelingLM.from_pretrained("llama-voice-cloning/checkpoint-10000")
 
 # Print model layers and exit
 print("\nModel Layers:")
@@ -245,7 +246,7 @@ print("\nExiting after printing model layers...")
 exit()
 
 class ClearCacheCallback(TrainerCallback):
-    def __init__(self, n_steps=250):
+    def __init__(self, n_steps=10):
         self.n_steps = n_steps
         self.step = 0
 
@@ -257,7 +258,7 @@ class ClearCacheCallback(TrainerCallback):
                 kwargs["model"].trainer.accelerator.clear()
 
 training_args = TrainingArguments(
-    output_dir="llama-voice-cloning",
+    output_dir="model-for-voice-cloning",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
     learning_rate=2e-5,
@@ -277,7 +278,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset,
-    #callbacks=[ClearCacheCallback()],
+    callbacks=[ClearCacheCallback()],
     #data_collator=collate_fn,
 )
 
@@ -285,5 +286,5 @@ print("training")
 trainer.train()
 
 print("saving")
-trainer.push_to_hub("edwindn/llama-voice-cloning", safe_serialization=False)
+trainer.push_to_hub("edwindn/model-for-voice-cloning", safe_serialization=False)
 
