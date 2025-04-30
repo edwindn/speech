@@ -13,6 +13,10 @@ from speaker_embedding import SpeakerModelingLM
 
 load_dotenv()
 
+# Disable wandb logging
+os.environ["WANDB_DISABLED"] = "true"
+
+
 SPEAKER_EMBEDDING_DIM = 192
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
@@ -87,7 +91,7 @@ if __name__ == "__main__":
 
 
     exit()
-    
+
     model = AutoModelForCausalLM.from_pretrained(model_name).eval()
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
