@@ -138,28 +138,24 @@ class SpeakerModelingLM(PreTrainedModel):
         print(">>>                unexpected:", unexpected)
 
         instance = cls(config, base_model)
+        missing_wrap, unexpected_wrap = instance.load_state_dict(fixed_state, strict=False)
+        print("🥸 wrapper load missing:   ", missing_wrap)
+        print("🥸 wrapper load unexpected:", unexpected_wrap)
 
-        proj_keys = [k for k in fixed_state.keys() if k.startswith("speaker_projection.")]
-        print("=== loaded speaker_projection keys ===")
-        for k in proj_keys:
-            print(" •", k)
+        # grab the checkpoint copy
+        ckpt_w = fixed_state["speaker_projection.linear.weight"]
 
-        proj_keys = [k for k in instance.state_dict().keys() if k.startswith("speaker_projection.")]
-        print("=== instance speaker_projection keys ===")
-        for k in proj_keys:
-            print(" •", k)
+        # grab the live copy
+        live_w = instance.state_dict()["speaker_projection.linear.weight"]
 
-        # Check if speaker projection weights match between fixed state and instance
-        if "speaker_projection.linear.weight" in fixed_state:
-            fixed_weight = fixed_state["speaker_projection.linear.weight"]
-            instance_weight = instance.state_dict()["speaker_projection.linear.weight"]
-            
-            if torch.allclose(fixed_weight, instance_weight):
-                print("✓ speaker_projection.linear.weight tensors match")
-            else:
-                print("✗ speaker_projection.linear.weight tensors differ")
-                print("  fixed shape:", fixed_weight.shape)
-                print("  instance shape:", instance_weight.shape)
+        # are they byte-for-byte identical?
+        if torch.equal(ckpt_w, live_w):
+            print("✅ speaker_projection.linear.weight was loaded perfectly!")
+        else:
+            # print a quick summary of the difference
+            diff = (ckpt_w - live_w).abs().max()
+            print(f"❌ speaker_projection.linear.weight differs!  max|Δ| = {diff:.6f}")
+
 
         return instance
     
