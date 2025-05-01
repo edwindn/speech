@@ -143,6 +143,19 @@ class SpeakerModelingLM(PreTrainedModel):
         print("🥸 wrapper load missing:   ", missing_wrap)
         print("🥸 wrapper load unexpected:", unexpected_wrap)
 
+        for key in instance.state_dict().keys():
+            if 'lm_head.weight' in key:
+                print(f"Found lm_head weight: {key}")
+                ckpt_lm = fixed_state["lm_head.weight"] 
+                live_lm = instance.state_dict()[key]
+                
+                if torch.equal(ckpt_lm, live_lm):
+                    print("✅ lm_head.weight was loaded perfectly!")
+                else:
+                    diff = (ckpt_lm - live_lm).abs().max()
+                    print(f"❌ lm_head.weight differs! max|Δ| = {diff:.6f}")
+                break
+
         # grab the checkpoint copy
         ckpt_w = fixed_state["speaker_projection.linear.weight"]
 
