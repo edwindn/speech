@@ -45,8 +45,6 @@ start = [start_of_human]
 middle = [end_of_text, end_of_human, start_of_gpt, start_of_audio]
 end = [end_of_audio, end_of_gpt]
 
-start, middle, end = torch.tensor(start), torch.tensor(middle), torch.tensor(end)
-
 # ---------------------- #
 
 model_name = "canopylabs/orpheus-3b-0.1-pretrained"
@@ -81,116 +79,17 @@ print(f"Using device: {device}")
 def map_fn(batch):
     text = batch["text"]
     text_tokens = tokenizer(text).input_ids
-    batch["text"] = text_tokens
-    return batch
+    audio_tokens = batch["codes_list"]
+    tokens = start + text_tokens + middle + audio_tokens + end
+    return {
+        "input_ids": tokens,
+        "attention_mask": [1] * len(tokens),
+        "labels": tokens.copy()
+    }
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
 
-# snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
-# snac = snac.to(device)
-
-class GatedMLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super().__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = torch.relu(x)
-        x = self.fc2(x)
-        return x
-
-# speaker_embedding_model = Model.from_pretrained("pyannote/embedding")
-# embed_speaker = Inference(speaker_embedding_model, window="whole")
-
-def detokenize_codes(tokens):
-    assert len(tokens) % 7 == 0, "Token length must be divisible by 7"
-    tokens = torch.tensor(tokens, device=device).reshape(-1, 7) - audio_token_start
-
-    snac0 = tokens[:, 0].unsqueeze(0)
-    snac1 = torch.stack([
-        tokens[:, 1] - snac_vocab_size,
-        tokens[:, 4] - snac_vocab_size * 4
-    ], dim=1).flatten().unsqueeze(0)
-    snac2 = torch.stack([
-        tokens[:, 2] - snac_vocab_size * 2,
-        tokens[:, 3] - snac_vocab_size * 3,
-        tokens[:, 5] - snac_vocab_size * 5,
-        tokens[:, 6] - snac_vocab_size * 6
-    ], dim=1).flatten().unsqueeze(0)
-
-    codes = [snac0, snac1, snac2]
-
-    assert all(c < snac_vocab_size for c in codes[0][0]), "snac0 must be less than snac_vocab_size"
-    assert all(c < snac_vocab_size for c in codes[1][0]), "snac1 must be less than snac_vocab_size"
-    assert all(c < snac_vocab_size for c in codes[2][0]), "snac2 must be less than snac_vocab_size"
-
-    return codes
-
-
-class SpeakerModelingLM(PreTrainedModel):
-    config_class = AutoConfig
-    base_model_prefix = ""
-
-    def __init__(self, config, model):
-        super().__init__(config)
-
-        self.model = model
-
-        self.speaker_projection = GatedMLP(SPEAKER_EMBEDDING_DIM, 768, LLAMA_EMBEDDING_DIM)
-        self.embedding_layer = self.model.get_input_embeddings()
-
-        self.register_buffer("start_tokens", torch.tensor(start, dtype=torch.long).unsqueeze(0))
-        self.register_buffer("middle_tokens", torch.tensor(middle, dtype=torch.long).unsqueeze(0))
-        self.register_buffer("end_tokens", torch.tensor(end, dtype=torch.long).unsqueeze(0))
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        return cls(model.config, model)
-
-    def forward(
-            self,
-            codes_list: torch.Tensor, # audio
-            text: torch.Tensor,
-            **kwargs
-        ):
-
-        device = next(self.parameters()).device
-        codes_list, text = codes_list.to(device), text.to(device)
-    
-        B, _ = codes_list.size()
-
-        start_embedding  = self.embedding_layer(self.start_tokens.to(device))
-        middle_embedding = self.embedding_layer(self.middle_tokens.to(device))
-        end_embedding    = self.embedding_layer(self.end_tokens.to(device))
-
-        audio_embedding = self.embedding_layer(codes_list)
-        text_embedding = self.embedding_layer(text)
-
-        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding, audio_embedding, end_embedding], dim=1)
-
-        start_ids  = self.start_tokens.repeat(B, 1).to(device)
-        middle_ids = self.middle_tokens.repeat(B, 1).to(device)
-        end_ids    = self.end_tokens.repeat(B, 1).to(device)
-
-        labels = torch.cat([start_ids, text, middle_ids, codes_list, end_ids], dim=1)
-
-        if model_inputs.size(1) > MAX_SEQ_LENGTH:
-            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
-            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
-            labels = labels[:, :MAX_SEQ_LENGTH]
-
-        attention_mask = torch.ones(model_inputs.size(0), model_inputs.size(1), dtype=torch.long, device=device)
-
-        out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels, return_dict=True)
-
-        return out.loss, out.logits
-    
-
-SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
-model = SpeakerModelingLM.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
 
 
 training_args = TrainingArguments(
@@ -217,6 +116,3 @@ trainer = Trainer(
 
 print("training")
 trainer.train()
-
-print("saving")
-trainer.push_to_hub("edwindn/llama-voice-cloning", safe_serialization=False)

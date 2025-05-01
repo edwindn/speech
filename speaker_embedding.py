@@ -138,36 +138,19 @@ class SpeakerModelingLM(PreTrainedModel):
 
         instance = cls(config, base_model)
         missing_wrap, unexpected_wrap = instance.load_state_dict(fixed_state, strict=False)
-        print("🥸 wrapper load missing:   ", missing_wrap)
-        print("🥸 wrapper load unexpected:", unexpected_wrap)
+        print("wrapper load missing:   ", missing_wrap)
+        print("wrapper load unexpected:", unexpected_wrap)
 
         for key in instance.state_dict().keys():
             if 'lm_head.weight' in key:
-                print(f"Found lm_head weight: {key}")
                 ckpt_lm = fixed_state["model.lm_head.weight"] 
                 live_lm = instance.state_dict()[key]
-                
-                if torch.equal(ckpt_lm, live_lm):
-                    print("✅ lm_head.weight was loaded perfectly!")
-                else:
-                    diff = (ckpt_lm - live_lm).abs().max()
-                    print(f"❌ lm_head.weight differs! max|Δ| = {diff:.6f}")
+                assert torch.equal(ckpt_lm, live_lm), "lm_head.weight was not loaded correctly"
                 break
 
-        # grab the checkpoint copy
         ckpt_w = fixed_state["speaker_projection.linear.weight"]
-
-        # grab the live copy
         live_w = instance.state_dict()["speaker_projection.linear.weight"]
-
-        # are they byte-for-byte identical?
-        if torch.equal(ckpt_w, live_w):
-            print("✅ speaker_projection.linear.weight was loaded perfectly!")
-        else:
-            # print a quick summary of the difference
-            diff = (ckpt_w - live_w).abs().max()
-            print(f"❌ speaker_projection.linear.weight differs!  max|Δ| = {diff:.6f}")
-
+        assert torch.equal(ckpt_w, live_w), "speaker_projection.linear.weight was not loaded correctly"
 
         return instance
     
