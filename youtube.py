@@ -1,4 +1,7 @@
-import re, os, time, requests, traceback
+import re, os, time, aiohttp, asyncio, traceback
+from typing import List
+import aiofiles
+import ast
 
 API_KEY  = "6fae47ef06msh54dcb697486c67ep17f9cfjsn54d2a7fd19df"
 API_HOST = "youtube-to-mp315.p.rapidapi.com"
@@ -20,770 +23,89 @@ def extract_video_id(url: str) -> str:
         raise ValueError(f"Could not extract video ID from: {url}")
     return m.group(1)
 
-def get_mp3_link(video_url: str, max_retries=8, delay=4) -> str:
+async def get_mp3_link(session: aiohttp.ClientSession, video_url: str, max_retries=8, delay=4) -> str:
     # 1) Kick off conversion
     print(f"[DEBUG] POST {DOWNLOAD_ENDPOINT}?url={video_url}")
-    resp = requests.post(DOWNLOAD_ENDPOINT, headers=HEADERS, params={"url": video_url})
-    resp.raise_for_status()
-    job = resp.json()
-    job_id = job["id"]
-    print(f"[DEBUG] Got job id = {job_id}, initial status = {job.get('status')}")
+    async with session.post(DOWNLOAD_ENDPOINT, headers=HEADERS, params={"url": video_url}) as resp:
+        resp.raise_for_status()
+        job = await resp.json()
+        job_id = job["id"]
+        print(f"[DEBUG] Got job id = {job_id}, initial status = {job.get('status')}")
 
-    # 2) Poll the status endpoint until it’s no longer CONVERTING
+    # 2) Poll the status endpoint until it's no longer CONVERTING
     status_url = f"{STATUS_ENDPOINT}/{job_id}"
     for i in range(1, max_retries+1):
         print(f"[DEBUG] GET {status_url} (attempt {i})")
-        r2 = requests.get(status_url, headers=HEADERS)
-        r2.raise_for_status()
-        s = r2.json()
-        st = s.get("status","<no-status>")
-        print(f"[DEBUG] status = {st!r}")
+        async with session.get(status_url, headers=HEADERS) as r2:
+            r2.raise_for_status()
+            s = await r2.json()
+            st = s.get("status","<no-status>")
+            print(f"[DEBUG] status = {st!r}")
 
-        if st.upper() != "CONVERTING" and "downloadUrl" in s:
-            print(f"[DEBUG] Conversion finished; downloadUrl = {s['downloadUrl']!r}")
-            return s["downloadUrl"]
+            if st.upper() != "CONVERTING" and "downloadUrl" in s:
+                print(f"[DEBUG] Conversion finished; downloadUrl = {s['downloadUrl']!r}")
+                return s["downloadUrl"]
 
-        time.sleep(delay)
+        await asyncio.sleep(delay)
 
     raise TimeoutError(f"job {job_id} still not ready after {max_retries} tries (last status={st!r})")
 
-def download_file(url: str, dest: str):
+async def download_file(session: aiohttp.ClientSession, url: str, dest: str):
     print(f"[DEBUG] downloading file from {url}")
-    with requests.get(url, stream=True) as r:
+    async with session.get(url) as r:
         r.raise_for_status()
-        with open(dest, "wb") as f:
-            for chunk in r.iter_content(8192):
-                f.write(chunk)
+        async with aiofiles.open(dest, "wb") as f:
+            async for chunk in r.content.iter_chunked(8192):
+                await f.write(chunk)
 
-def main(short_urls, out_dir="mp3_downloads"):
+async def process_url(session: aiohttp.ClientSession, url: str, out_dir: str) -> bool:
+    try:
+        vid = extract_video_id(url)
+        if f'{vid}.mp3' in os.listdir(out_dir):
+            print(f"Skipping {url} because it already exists")
+            return True
+            
+        print(f"Processing video ID: {vid}")
+        watch = f"https://www.youtube.com/watch?v={vid}"
+        mp3_url = await get_mp3_link(session, watch)
+        out_path = os.path.join(out_dir, f"{vid}.mp3")
+        await download_file(session, mp3_url, out_path)
+        print("✅ done\n")
+        return True
+    except Exception as e:
+        print(f"❌ Failed for {url}: {e}")
+        traceback.print_exc()
+        print()
+        return False
+
+async def process_urls(urls: List[str], out_dir: str = "mp3_downloads", max_concurrent: int = 5):
     os.makedirs(out_dir, exist_ok=True)
-    for s in short_urls:
-        try:
-            vid = extract_video_id(s)
-            if f'{vid}.mp3' in os.listdir(out_dir):
-                print(f"Skipping {s} because it already exists")
-                continue
-            print(f"Processing video ID: {vid}")
-            watch = f"https://www.youtube.com/watch?v={vid}"
-            mp3_url = get_mp3_link(watch)
-            out_path = os.path.join(out_dir, f"{vid}.mp3")
-            download_file(mp3_url, out_path)
-            print("✅ done\n")
-        except Exception as e:
-            print(f"❌ Failed for {s}: {e}")
-            traceback.print_exc()
-            print()
+    
+    # Create a semaphore to limit concurrent downloads
+    sem = asyncio.Semaphore(max_concurrent)
+    
+    async def bounded_process(url: str) -> bool:
+        async with sem:
+            async with aiohttp.ClientSession() as session:
+                return await process_url(session, url, out_dir)
+    
+    # Process URLs concurrently with bounded concurrency
+    tasks = [bounded_process(url) for url in urls]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Print summary
+    successful = sum(1 for r in results if r is True)
+    print(f"\nProcessing complete: {successful}/{len(urls)} successful")
 
-#@title urls
-urls = """https://www.youtube.com/shorts/EBhsjLbwf9M
-https://www.youtube.com/shorts/QFO2RFYic7U
-https://www.youtube.com/shorts/xEDvKyFg7WA
-https://www.youtube.com/shorts/spof4vFIuLE
-https://www.youtube.com/shorts/9GPK73POGeo
-https://www.youtube.com/shorts/eo4zRMw6Vw8
-https://www.youtube.com/shorts/7SHkegUOerk
-https://www.youtube.com/shorts/SCsuDuBfC94
-https://www.youtube.com/shorts/Tv_Q9l9LJSE
-https://www.youtube.com/shorts/tgno1EPCv9Q
-https://www.youtube.com/shorts/vrdgVljRFIQ
-https://www.youtube.com/shorts/mVvVmH1O2Oo
-https://www.youtube.com/shorts/RsJr9GdOttY
-https://www.youtube.com/shorts/cRLTSSrTqmY
-https://www.youtube.com/shorts/OklaQf9ShxU
-https://www.youtube.com/shorts/fDngalhFI1w
-https://www.youtube.com/shorts/5uLS2Q1KV9c
-https://www.youtube.com/shorts/sWDMF2GRrdE
-https://www.youtube.com/shorts/XzHQ0S17PjI
-https://www.youtube.com/shorts/AAsQMDKgQNk
-https://www.youtube.com/shorts/ErL6EslA1CI
-https://www.youtube.com/shorts/aoMnDmb2WTg
-https://www.youtube.com/shorts/eZbZezNDIwo
-https://www.youtube.com/shorts/382kC6JVvIQ
-https://www.youtube.com/shorts/NPdYv-I91Vw
-https://www.youtube.com/shorts/JpTit1J60QA
-https://www.youtube.com/shorts/Wwlz8BrwFHE
-https://www.youtube.com/shorts/ClMc8hAk_jI
-https://www.youtube.com/shorts/rv2ljEmRJPo
-https://www.youtube.com/shorts/IUACDm53ZHo
-https://www.youtube.com/shorts/VTJp0Cp4BZ8
-https://www.youtube.com/shorts/XvFK9Y_q7eA
-https://www.youtube.com/shorts/TPbvsFx040o
-https://www.youtube.com/shorts/Tn4jBGuTmvo
-https://www.youtube.com/shorts/AIqsPN9-7Dc
-https://www.youtube.com/shorts/HqQtcTtA66o
-https://www.youtube.com/shorts/fuD811XTKBI
-https://www.youtube.com/shorts/Yo8FkZVUtqI
-https://www.youtube.com/shorts/Bb-bCeUoZak
-https://www.youtube.com/shorts/jz76wGB-164
-https://www.youtube.com/shorts/Llhn_Hs6WzI
-https://www.youtube.com/shorts/JTOJ6e5Rufk
-https://www.youtube.com/shorts/Zy99CzLQ0E4
-https://www.youtube.com/shorts/xbDrPRLXLKY
-https://www.youtube.com/shorts/Q2NElsNTk9Y
-https://www.youtube.com/shorts/F18X_Je4Two
-https://www.youtube.com/shorts/bKm56Z5niGk
-https://www.youtube.com/shorts/_FOYbcYc9Jc
-https://www.youtube.com/shorts/s-83kXJXjoM
-https://www.youtube.com/shorts/phnpI_rILHU
-https://www.youtube.com/shorts/38T3vLwKVec
-https://www.youtube.com/shorts/7_RRci9Sc5I
-https://www.youtube.com/shorts/_ygGetWnhWc
-https://www.youtube.com/shorts/XnGG39PHZj8
-https://www.youtube.com/shorts/IyT1DiMJUMs
-https://www.youtube.com/shorts/-GN3lYUJNtE
-https://www.youtube.com/shorts/ze_qKEiWwNw
-https://www.youtube.com/shorts/Bito1oAI24Q
-https://www.youtube.com/shorts/-inLS9aNVZ0
-https://www.youtube.com/shorts/Ge-YZpcDHEo
-https://www.youtube.com/shorts/ANdL75NRtro
-https://www.youtube.com/shorts/KRQ9xr4BMhA
-https://www.youtube.com/shorts/jNs6Lj1Blu0
-https://www.youtube.com/shorts/xBUzOIhEp_s
-https://www.youtube.com/shorts/eeviIODo7F0
-https://www.youtube.com/shorts/oZuBEsQiSjw
-https://www.youtube.com/shorts/PRrdQdenpNQ
-https://www.youtube.com/shorts/1pl9-fQ1zbE
-https://www.youtube.com/shorts/b_20Rji6Ako
-https://www.youtube.com/shorts/tdl1Yr3o-sU
-https://www.youtube.com/shorts/AaLblB9Q-K0
-https://www.youtube.com/shorts/fr_bQlEdfMA
-https://www.youtube.com/shorts/Sw0utqgq-kg
-https://www.youtube.com/shorts/amMvXqzXB38
-https://www.youtube.com/shorts/Hdz5EcXT74A
-https://www.youtube.com/shorts/q1WBh1GQo5A
-https://www.youtube.com/shorts/KiURT_5_IaQ
-https://www.youtube.com/shorts/BmBwHCTz1qE
-https://www.youtube.com/shorts/QQDGN-gkBhs
-https://www.youtube.com/shorts/CsHdHrg-B4c
-https://www.youtube.com/shorts/LQltgNO5wQM
-https://www.youtube.com/shorts/UnWpPRuge4Y
-https://www.youtube.com/shorts/FBw5sLxA1tI
-https://www.youtube.com/shorts/oe12s7rQnVk
-https://www.youtube.com/shorts/gLG1Ycsdhdo
-https://www.youtube.com/shorts/8qw8vT1PBVw
-https://www.youtube.com/shorts/TYSxTarenk8
-https://www.youtube.com/shorts/EbnAivx2CoQ
-https://www.youtube.com/shorts/SESRZ5ujkH4
-https://www.youtube.com/shorts/AjVpVuAuCuA
-https://www.youtube.com/shorts/M8VWoK93NGk
-https://www.youtube.com/shorts/A69D1jZi7B4
-https://www.youtube.com/shorts/vUOiKwcL5m4
-https://www.youtube.com/shorts/DW_Cutid_PE
-https://www.youtube.com/shorts/OieHbK2iXEE
-https://www.youtube.com/shorts/v90LkpB9lr0
-https://www.youtube.com/shorts/byg51R8aFcQ
-https://www.youtube.com/shorts/X0G9mf2wSrQ
-https://www.youtube.com/shorts/jH393VEsUpQ
-https://www.youtube.com/shorts/rpm5taXVvpY
-https://www.youtube.com/shorts/eOrprrO0FsM
-https://www.youtube.com/shorts/MGXkOdYW-tg
-https://www.youtube.com/shorts/HwAKQTYzdio
-https://www.youtube.com/shorts/2mHY6hwt_MA
-https://www.youtube.com/shorts/JVI_V9C6zcI
-https://www.youtube.com/shorts/2jLs6HVG8gQ
-https://www.youtube.com/shorts/iwakPOe6jjg
-https://www.youtube.com/shorts/7kvPC8xSESM
-https://www.youtube.com/shorts/LluSYpoT7TU
-https://www.youtube.com/shorts/EMp3fd6hTXk
-https://www.youtube.com/shorts/eyJebL9MKnU
-https://www.youtube.com/shorts/Fdv9PFAXJ3s
-https://www.youtube.com/shorts/aLlh73HRoyo
-https://www.youtube.com/shorts/uBhcOtP5kxo
-https://www.youtube.com/shorts/E-HRbUxJI8Y
-https://www.youtube.com/shorts/Wx9Tt_xPo7M
-https://www.youtube.com/shorts/hHNTri7lD3I
-https://www.youtube.com/shorts/CX4mvaamg5Q
-https://www.youtube.com/shorts/o6l50gWw-94
-https://www.youtube.com/shorts/fN3V1VEncew
-https://www.youtube.com/shorts/_rhJb8wbShU
-https://www.youtube.com/shorts/R2TB4WiKxvU
-https://www.youtube.com/shorts/QiHfOcq83LM
-https://www.youtube.com/shorts/tZWvyhU0ErI
-https://www.youtube.com/shorts/KLR2HVFfDkM
-https://www.youtube.com/shorts/MeA-mJMxgVY
-https://www.youtube.com/shorts/otN5j-FsbFw
-https://www.youtube.com/shorts/ERYAYN_JJck
-https://www.youtube.com/shorts/8_pIcGsx-DE
-https://www.youtube.com/shorts/djRtYvgYHqs
-https://www.youtube.com/shorts/3CRufY-5mMQ
-https://www.youtube.com/shorts/-N_TjAkS1ek
-https://www.youtube.com/shorts/bzZzZFeW0Ys
-https://www.youtube.com/shorts/-Xl3HXlZkNk
-https://www.youtube.com/shorts/SAuac_po6D4
-https://www.youtube.com/shorts/b2UzF_dzTzc
-https://www.youtube.com/shorts/1dRIHT_SYO0
-https://www.youtube.com/shorts/YZPsOocl5EI
-https://www.youtube.com/shorts/co9KElY-cns
-https://www.youtube.com/shorts/Zry-_Ovax-Q
-https://www.youtube.com/shorts/iXfRMJ5bIQY
-https://www.youtube.com/shorts/plJk_U0egRY
-https://www.youtube.com/shorts/8dFx-rfURgg
-https://www.youtube.com/shorts/fkSmQpUsKzw
-https://www.youtube.com/shorts/FFcvV8jZZsE
-https://www.youtube.com/shorts/2Y406tf5FjU
-https://www.youtube.com/shorts/X7KqXzZDxBo
-https://www.youtube.com/shorts/8biAIJ-arLo
-https://www.youtube.com/shorts/SkTo5smsfaM
-https://www.youtube.com/shorts/5RSJAvedGvo
-https://www.youtube.com/shorts/sYnaoNuqSyA
-https://www.youtube.com/shorts/vi4qX4FwthY
-https://www.youtube.com/shorts/lMSTOjYvNbo
-https://www.youtube.com/shorts/AbCBrVfxs_Y
-https://www.youtube.com/shorts/4rkGM4mNkbE
-https://www.youtube.com/shorts/UyPPvLbRr4I
-https://www.youtube.com/shorts/fYu4-hTb0qs
-https://www.youtube.com/shorts/GIUEfmgN9hU
-https://www.youtube.com/shorts/5agfCLpx0nA
-https://www.youtube.com/shorts/rw3ExPJ0Nj0
-https://www.youtube.com/shorts/IugwP6PTa2I
-https://www.youtube.com/shorts/sG4JV7m-3GY
-https://www.youtube.com/shorts/_3pZ04ugNiw
-https://www.youtube.com/shorts/CGTW29BodOs
-https://www.youtube.com/shorts/JNZgZr5PumM
-https://www.youtube.com/shorts/Ng20lKNPxkA
-https://www.youtube.com/shorts/JcRLvOMeESE
-https://www.youtube.com/shorts/Iu43glLuKhs
-https://www.youtube.com/shorts/PE9OdrUb8PA
-https://www.youtube.com/shorts/trDlZtEu_aA
-https://www.youtube.com/shorts/PJoxzHMi1Hs
-https://www.youtube.com/shorts/SeOYJ8xUMxw
-https://www.youtube.com/shorts/XX4JuO-cTyo
-https://www.youtube.com/shorts/nWrQt859eyA
-https://www.youtube.com/shorts/D_lqXK7nw3U
-https://www.youtube.com/shorts/ZdhIjhLeokk
-https://www.youtube.com/shorts/lORbEy6dpew
-https://www.youtube.com/shorts/x3EOYXsXPdc
-https://www.youtube.com/shorts/6oRdRMYbvTQ
-https://www.youtube.com/shorts/0Ktui0C6z-E
-https://www.youtube.com/shorts/tC4F-UlxOSo
-https://www.youtube.com/shorts/E8IaG-nH5gc
-https://www.youtube.com/shorts/tqQ8xxr6R04
-https://www.youtube.com/shorts/6BgPVq7loAQ
-https://www.youtube.com/shorts/JFe0Wo4pY_8
-https://www.youtube.com/shorts/NhSGaOL4-1w
-https://www.youtube.com/shorts/w3uFToLMYTQ
-https://www.youtube.com/shorts/ZvaNoXw7PbU
-https://www.youtube.com/shorts/aHBJl1wYvMA
-https://www.youtube.com/shorts/7zmnAbYx_Y4
-https://www.youtube.com/shorts/sbG8NHNGGtI
-https://www.youtube.com/shorts/k5mWHfsHVeA
-https://www.youtube.com/shorts/_MmXw_B_2-o
-https://www.youtube.com/shorts/alus1flSybE
-https://www.youtube.com/shorts/2HGIqlDwtaE
-https://www.youtube.com/shorts/eFh5SO0RMGQ
-https://www.youtube.com/shorts/GrjUGiNLCFo
-https://www.youtube.com/shorts/XMnE1vrZT8o
-https://www.youtube.com/shorts/L4Jgzb3g6YY
-https://www.youtube.com/shorts/8Z9nsQlToiY
-https://www.youtube.com/shorts/ikF8Jm_xHl0
-https://www.youtube.com/shorts/6vlx2v6wmaA
-https://www.youtube.com/shorts/hOBfug0L3cE
-https://www.youtube.com/shorts/GpZ0aFNsRQw
-https://www.youtube.com/shorts/gD8Uqo8k_vM
-https://www.youtube.com/shorts/tOqxNhpPVK8
-https://www.youtube.com/shorts/cHiU8AfMKmU
-https://www.youtube.com/shorts/2b-MPNYKI4o
-https://www.youtube.com/shorts/o3yO-X7hWKQ
-https://www.youtube.com/shorts/O85EIGOLtV0
-https://www.youtube.com/shorts/XKiTJaDxRXU
-https://www.youtube.com/shorts/kn5XQ5TR8BI
-https://www.youtube.com/shorts/bM_emWoU4Lg
-https://www.youtube.com/shorts/e9KxhHkmHk0
-https://www.youtube.com/shorts/aTYuw8gKjWA
-https://www.youtube.com/shorts/g0LTf0jcsYI
-https://www.youtube.com/shorts/2WiCyesj3fE
-https://www.youtube.com/shorts/IPwCTy1k7Ww
-https://www.youtube.com/shorts/WqRZiikUSgc
-https://www.youtube.com/shorts/WjPm9lo7ano
-https://www.youtube.com/shorts/N2dJmFTMYJ8
-https://www.youtube.com/shorts/9Boys31C-yQ
-https://www.youtube.com/shorts/phQkG5UARlw
-https://www.youtube.com/shorts/POJreSiCKq8
-https://www.youtube.com/shorts/vtos5fNu_SI
-https://www.youtube.com/shorts/4NNnhpGBPLY
-https://www.youtube.com/shorts/Z20wr_pW6io
-https://www.youtube.com/shorts/JngYOOTIq6s
-https://www.youtube.com/shorts/3gzHFh4LUf0
-https://www.youtube.com/shorts/xcmqvoBe_CY
-https://www.youtube.com/shorts/rhEBSzh-w9I
-https://www.youtube.com/shorts/OPUJLvwG5nM
-https://www.youtube.com/shorts/0JTNk1wMwLI
-https://www.youtube.com/shorts/3SjsptvkhTo
-https://www.youtube.com/shorts/iTwfgG-i3h0
-https://www.youtube.com/shorts/LOjg7XjOPAg
-https://www.youtube.com/shorts/U-W9Kh6nmcY
-https://www.youtube.com/shorts/c-HaoKgq9AU
-https://www.youtube.com/shorts/ZnIB8JFl_p0
-https://www.youtube.com/shorts/91_fw6RfmjE
-https://www.youtube.com/shorts/MHCDcxM7iAc
-https://www.youtube.com/shorts/9U7naY4QcRk
-https://www.youtube.com/shorts/F9XBQ-QUK0U
-https://www.youtube.com/shorts/ykAuqPseJ5A
-https://www.youtube.com/shorts/37DS0bwdJZc
-https://www.youtube.com/shorts/GWrbF-ByGDw
-https://www.youtube.com/shorts/AItlLiSveEY
-https://www.youtube.com/shorts/M21fx1ip8bs
-https://www.youtube.com/shorts/SLyuu-GzU8Q
-https://www.youtube.com/shorts/aAdQzL5SWlI
-https://www.youtube.com/shorts/fnSUU0LD95I
-https://www.youtube.com/shorts/PljP2_mGEbQ
-https://www.youtube.com/shorts/pLcSbTzktuI
-https://www.youtube.com/shorts/MgqFglSdmDw
-https://www.youtube.com/shorts/88i_dvXzXjU
-https://www.youtube.com/shorts/vL1phVzddFc
-https://www.youtube.com/shorts/nEMXJVL8uRA
-https://www.youtube.com/shorts/-E9JfPQiChM
-https://www.youtube.com/shorts/b8FSe-sBHCA
-https://www.youtube.com/shorts/0LQVtwOV5jU
-https://www.youtube.com/shorts/MPUoRFdLDk4
-https://www.youtube.com/shorts/gBT39WWATP4
-https://www.youtube.com/shorts/f3PppydoUJQ
-https://www.youtube.com/shorts/ovZLtg5oOQY
-https://www.youtube.com/shorts/C-dhiBNsHBs
-https://www.youtube.com/shorts/J11uMtrt8cM
-https://www.youtube.com/shorts/jugPk0T2SKg
-https://www.youtube.com/shorts/zCO1CZf_twI
-https://www.youtube.com/shorts/nTnk2tgZbGo
-https://www.youtube.com/shorts/hZaneodyYEQ
-https://www.youtube.com/shorts/3p7qRk5VUBw
-https://www.youtube.com/shorts/AQgNcHvvqAg
-https://www.youtube.com/shorts/n56yDF-g8xE
-https://www.youtube.com/shorts/2ilIpRjOvrM
-https://www.youtube.com/shorts/j1XCqIwIWJY
-https://www.youtube.com/shorts/WGksd5nqgoY
-https://www.youtube.com/shorts/7jDhAPfmBRg
-https://www.youtube.com/shorts/wcmA59i3Dbc
-https://www.youtube.com/shorts/LhGngn8ly-Y
-https://www.youtube.com/shorts/jcrV66AvH7Y
-https://www.youtube.com/shorts/fpd813pBSJo
-https://www.youtube.com/shorts/Pz2FxTrmUHM
-https://www.youtube.com/shorts/QB2ywYTJdUk
-https://www.youtube.com/shorts/njW7oI4bO30
-https://www.youtube.com/shorts/6yMWQ9SPxOU
-https://www.youtube.com/shorts/KXu7d1tkgKg
-https://www.youtube.com/shorts/1attBSizVWU
-https://www.youtube.com/shorts/JpnXgAl-ONQ
-https://www.youtube.com/shorts/HUfgWJ43ols
-https://www.youtube.com/shorts/Rb3b0u3SDlQ
-https://www.youtube.com/shorts/7e-ehfRoX0w
-https://www.youtube.com/shorts/LOtyV562jtM
-https://www.youtube.com/shorts/rCmw1IQMJLs
-https://www.youtube.com/shorts/9k8LWi1OFr4
-https://www.youtube.com/shorts/KpDZ_hOby9I
-https://www.youtube.com/shorts/A7IRHc7TxVA
-https://www.youtube.com/shorts/2EeAvUjVCjk
-https://www.youtube.com/shorts/E4u6Ye2WHQo
-https://www.youtube.com/shorts/C1Lf3NGG7ps
-https://www.youtube.com/shorts/PbR9wwf_bhE
-https://www.youtube.com/shorts/aLc7rh89FuE
-https://www.youtube.com/shorts/6g3P1QwxHn8
-https://www.youtube.com/shorts/PKwAkBvVBuI
-https://www.youtube.com/shorts/kEMP165lTyM
-https://www.youtube.com/shorts/hv9Y23g5es8
-https://www.youtube.com/shorts/kdWgDEcbsLw
-https://www.youtube.com/shorts/HQgbTy9S1-0
-https://www.youtube.com/shorts/nHJPi_9h560
-https://www.youtube.com/shorts/j5vn1QmB7WM
-https://www.youtube.com/shorts/qbxxwSgsqFE
-https://www.youtube.com/shorts/TceRPUqHn34
-https://www.youtube.com/shorts/c5EHGm2BKAA
-https://www.youtube.com/shorts/8t7kDE-q3k4
-https://www.youtube.com/shorts/Ox4eWgqxlVY
-https://www.youtube.com/shorts/xvCU4lp9sfQ
-https://www.youtube.com/shorts/kFrecMwv4Yw
-https://www.youtube.com/shorts/DIdNO1cltWs
-https://www.youtube.com/shorts/6DHEKhi97cc
-https://www.youtube.com/shorts/KfozAwek4qo
-https://www.youtube.com/shorts/hkKLKVcWie8
-https://www.youtube.com/shorts/9qLlan5r7dk
-https://www.youtube.com/shorts/VNpjDG6bZmE
-https://www.youtube.com/shorts/a7RCrLX4vU8
-https://www.youtube.com/shorts/ndA6j-j7OMA
-https://www.youtube.com/shorts/tqmXoeZZyfg
-https://www.youtube.com/shorts/mW4HwghT-qg
-https://www.youtube.com/shorts/QJYBpxTPVjc
-https://www.youtube.com/shorts/KRQao_CDlTU
-https://www.youtube.com/shorts/FIHiO7WB0VQ
-https://www.youtube.com/shorts/_azrOtN2_BU
-https://www.youtube.com/shorts/9zkG1s3MhZg
-https://www.youtube.com/shorts/XZHwwUpK9rw
-https://www.youtube.com/shorts/YNgfZlybHic
-https://www.youtube.com/shorts/2WXbLyCmJnk
-https://www.youtube.com/shorts/K27ajCf8jTE
-https://www.youtube.com/shorts/uUQqawasgPE
-https://www.youtube.com/shorts/213oDLnzlzk
-https://www.youtube.com/shorts/H9c2yhBU5p8
-https://www.youtube.com/shorts/fBHWVPYjvno
-https://www.youtube.com/shorts/TuqUTNpqoz8
-https://www.youtube.com/shorts/X9aTYJNf8Rs
-https://www.youtube.com/shorts/4i7V6AqbZSE
-https://www.youtube.com/shorts/VyOFey1enow
-https://www.youtube.com/shorts/9AU4J3sm1Aw
-https://www.youtube.com/shorts/3Vg6QFl7u7I
-https://www.youtube.com/shorts/-zx5PbQD5QM
-https://www.youtube.com/shorts/WzucSmHkNN4
-https://www.youtube.com/shorts/BunO0LXQmts
-https://www.youtube.com/shorts/zXLr5nZkHQ0
-https://www.youtube.com/shorts/S4FtTdVNGDU
-https://www.youtube.com/shorts/SwR7xOdFMi8
-https://www.youtube.com/shorts/-yrZ_FnKCAQ
-https://www.youtube.com/shorts/mOtmJCK6dWQ
-https://www.youtube.com/shorts/usCVvaobOKM
-https://www.youtube.com/shorts/HOdxDSo6dDw
-https://www.youtube.com/shorts/aHgu3mTkKVY
-https://www.youtube.com/shorts/wNAj6EohaiQ
-https://www.youtube.com/shorts/9ixSK_tOPRk
-https://www.youtube.com/shorts/2ivBRGTon4g
-https://www.youtube.com/shorts/ICWu4H1xENg
-https://www.youtube.com/shorts/lOg-YnE1uBk
-https://www.youtube.com/shorts/ojrbgdWawIs
-https://www.youtube.com/shorts/YXI00UMlr3s
-https://www.youtube.com/shorts/OkNn6vxqKfI
-https://www.youtube.com/shorts/DC100xHtI9w
-https://www.youtube.com/shorts/hB35VLDBPpE
-https://www.youtube.com/shorts/_wp1ESUaKxI
-https://www.youtube.com/shorts/NgkpAnLviWs
-https://www.youtube.com/shorts/ET3PJaKs2O8
-https://www.youtube.com/shorts/JlAFo9roWC0
-https://www.youtube.com/shorts/e3W98SV2W10
-https://www.youtube.com/shorts/TSMc34gIFMs
-https://www.youtube.com/shorts/vXORiGc9iFM
-https://www.youtube.com/shorts/z3Aob7P6ySQ
-https://www.youtube.com/shorts/giKq2me1Fc8
-https://www.youtube.com/shorts/-tqrpFy9a90
-https://www.youtube.com/shorts/27qK_Nn2Ms8
-https://www.youtube.com/shorts/WlAot6EQoqs
-https://www.youtube.com/shorts/TQh6sPhzNqc
-https://www.youtube.com/shorts/tKg5PCzcb38
-https://www.youtube.com/shorts/ta_mKUGwS98
-https://www.youtube.com/shorts/eFJFJYswaHQ
-https://www.youtube.com/shorts/6YeYfCg6h2g
-https://www.youtube.com/shorts/uSTkdtP6QoU
-https://www.youtube.com/shorts/G1F6zEJ2HzQ
-https://www.youtube.com/shorts/e1KnnozvtHk
-https://www.youtube.com/shorts/zQrm8uF3IOg
-https://www.youtube.com/shorts/2t06jtUc78Y
-https://www.youtube.com/shorts/7F6kEG1sczg
-https://www.youtube.com/shorts/67Oj3qXLDzY
-https://www.youtube.com/shorts/17Itq_XO5S0
-https://www.youtube.com/shorts/JC-PG-XKEAY
-https://www.youtube.com/shorts/1htwo9FZYP8
-https://www.youtube.com/shorts/cf6wMRZvGNk
-https://www.youtube.com/shorts/MXZLvYunhTI
-https://www.youtube.com/shorts/ycZDHIAgMZA
-https://www.youtube.com/shorts/OKMzPGOVG8U
-https://www.youtube.com/shorts/EJ1PQIuCSXA
-https://www.youtube.com/shorts/sG0bZtcJX0o
-https://www.youtube.com/shorts/MYxjWXtLuoQ
-https://www.youtube.com/shorts/1zBkLcI-hjg
-https://www.youtube.com/shorts/VXV_ETDsscU
-https://www.youtube.com/shorts/fyfUHAfZjb0
-https://www.youtube.com/shorts/pwKp4AMQiro
-https://www.youtube.com/shorts/9y9OzXsfJ-I
-https://www.youtube.com/shorts/PgRa16KylvE
-https://www.youtube.com/shorts/Lv2hOZ3Xudk
-https://www.youtube.com/shorts/7NW6bqdtD40
-https://www.youtube.com/shorts/xzVe2gaUxN8
-https://www.youtube.com/shorts/G3sImHvgxBs
-https://www.youtube.com/shorts/rdNanfypxOc
-https://www.youtube.com/shorts/xFL5zSwpo_s
-https://www.youtube.com/shorts/fK4Pxbug1bI
-https://www.youtube.com/shorts/ACOB-1keCNc
-https://www.youtube.com/shorts/Asq9sare2vs
-https://www.youtube.com/shorts/xtZ2NpABi3U
-https://www.youtube.com/shorts/vH6G_HcOZnA
-https://www.youtube.com/shorts/XHD9dKyoCo0
-https://www.youtube.com/shorts/LvuTrc89__0
-https://www.youtube.com/shorts/rZ1jew0KYUc
-https://www.youtube.com/shorts/cE_Xefl8ek4
-https://www.youtube.com/shorts/VgjQ0-j3kEk
-https://www.youtube.com/shorts/WIVhiWsnOuk
-https://www.youtube.com/shorts/kl78EpNYvUQ
-https://www.youtube.com/shorts/TK_mWS-CPS0
-https://www.youtube.com/shorts/sRE3xixCblc
-https://www.youtube.com/shorts/iaE6i9cYTmg
-https://www.youtube.com/shorts/a4KrTm5OsMM
-https://www.youtube.com/shorts/Blwrr_DFpsE
-https://www.youtube.com/shorts/TP2mraIjktU
-https://www.youtube.com/shorts/xK47rzBZQdg
-https://www.youtube.com/shorts/ETwRgJMAdek
-https://www.youtube.com/shorts/WAZ7-Rdr5v0
-https://www.youtube.com/shorts/GYmmVvcX1qE
-https://www.youtube.com/shorts/VNYMWQlwQIc
-https://www.youtube.com/shorts/qAf7aWkL9HI
-https://www.youtube.com/shorts/KFy6UhSCE6E
-https://www.youtube.com/shorts/2DfmwRsHk_U
-https://www.youtube.com/shorts/PcbjXtseNhA
-https://www.youtube.com/shorts/yO8fZk-_oDY
-https://www.youtube.com/shorts/up3BhJx1W5w
-https://www.youtube.com/shorts/tCkE7yWZenA
-https://www.youtube.com/shorts/eua9m2g21XU
-https://www.youtube.com/shorts/CkDEc-0F9I0
-https://www.youtube.com/shorts/zxThOeEeAFw
-https://www.youtube.com/shorts/xCBxFhHyjc8
-https://www.youtube.com/shorts/7DYIyJPNKoY
-https://www.youtube.com/shorts/VWSON-thUkY
-https://www.youtube.com/shorts/Xz5P3cKvmqo
-https://www.youtube.com/shorts/NBLoJ7OqB4c
-https://www.youtube.com/shorts/CzFhTo477fY
-https://www.youtube.com/shorts/A11xVwH3DNY
-https://www.youtube.com/shorts/3f35PwdRIEw
-https://www.youtube.com/shorts/Mh_dpbwW9Tg
-https://www.youtube.com/shorts/-HVunatMx04
-https://www.youtube.com/shorts/b3Yhxq_VBeM
-https://www.youtube.com/shorts/yxK1jDFQONY
-https://www.youtube.com/shorts/W9y15pCmg-c
-https://www.youtube.com/shorts/rQf3lIgLQV4
-https://www.youtube.com/shorts/Yn1H91Smzf0
-https://www.youtube.com/shorts/PnlzpophtE8
-https://www.youtube.com/shorts/hwTYSGxKTD0
-https://www.youtube.com/shorts/QK2KvjXk86Q
-https://www.youtube.com/shorts/kZfqq8qh5pE
-https://www.youtube.com/shorts/0PCEeUs3GdM
-https://www.youtube.com/shorts/aPwxnC0gBWk
-https://www.youtube.com/shorts/tdQpKhCmwYc
-https://www.youtube.com/shorts/UFvesGFrQEc
-https://www.youtube.com/shorts/Ipfi2FlG_Z0
-https://www.youtube.com/shorts/kNop5Lv5Euo
-https://www.youtube.com/shorts/TY363MhPZgc
-https://www.youtube.com/shorts/Ar8pdpamMZo
-https://www.youtube.com/shorts/kdaJzNgHxPk
-https://www.youtube.com/shorts/eUR4XHrwLaQ
-https://www.youtube.com/shorts/r__1lXAjCFY
-https://www.youtube.com/shorts/P064RhaOCwg
-https://www.youtube.com/shorts/Dr-oYbyyLUo
-https://www.youtube.com/shorts/grsLnGHgGaA
-https://www.youtube.com/shorts/d6IYVBk2jpI
-https://www.youtube.com/shorts/aokLFw1IE04
-https://www.youtube.com/shorts/44_bxXn4Xko
-https://www.youtube.com/shorts/nmjsGGkCa4s
-https://www.youtube.com/shorts/KDQcjQ7TVtA
-https://www.youtube.com/shorts/FNT0DLS-KS8
-https://www.youtube.com/shorts/4Espj18tpUs
-https://www.youtube.com/shorts/H2ueRDU3zXg
-https://www.youtube.com/shorts/DwnKX1kvQ6s
-https://www.youtube.com/shorts/YozKG8ek9EQ
-https://www.youtube.com/shorts/t1tfn2fqwUA
-https://www.youtube.com/shorts/WouN0dkHBw8
-https://www.youtube.com/shorts/SvIOLUmYEMs
-https://www.youtube.com/shorts/R29cKbTP5jc
-https://www.youtube.com/shorts/MMGgdNeaKTU
-https://www.youtube.com/shorts/k7ChMqZUa5s
-https://www.youtube.com/shorts/Pqe_C3mzQm0
-https://www.youtube.com/shorts/Ecw-vXAu29A
-https://www.youtube.com/shorts/WmnuXaHuNsw
-https://www.youtube.com/shorts/q15HtXME3gg
-https://www.youtube.com/shorts/KlcHLnYKTYw
-https://www.youtube.com/shorts/zGylBrl1JsI
-https://www.youtube.com/shorts/6l-hkBpA3RE
-https://www.youtube.com/shorts/TPpnbjoUA9k
-https://www.youtube.com/shorts/h42pcoX_07E
-https://www.youtube.com/shorts/A4hoaX35lcA
-https://www.youtube.com/shorts/3kNkpT_gmFM
-https://www.youtube.com/shorts/VfnfmgW6Syg
-https://www.youtube.com/shorts/ngLHAjjcusU
-https://www.youtube.com/shorts/pTYLt30QwoA
-https://www.youtube.com/shorts/A1uoYXAHOXQ
-https://www.youtube.com/shorts/EjSjU1KZLL0
-https://www.youtube.com/shorts/AP1e9o8m9H0
-https://www.youtube.com/shorts/iqbQdlnsmq4
-https://www.youtube.com/shorts/VI2y9mEuYgE
-https://www.youtube.com/shorts/pbQdWkoKbuU
-https://www.youtube.com/shorts/5LEHvP6sjMg
-https://www.youtube.com/shorts/1BL4L23XLn0
-https://www.youtube.com/shorts/FeM8CRaTZhU
-https://www.youtube.com/shorts/-XvaYlNeRYw
-https://www.youtube.com/shorts/OML3SFG_9u8
-https://www.youtube.com/shorts/DsJzQeqekYU
-https://www.youtube.com/shorts/Y-NvpEUG3l4
-https://www.youtube.com/shorts/wJzq0HtP2ZI
-https://www.youtube.com/shorts/sbuCZUDkffI
-https://www.youtube.com/shorts/STjhraBWPR0
-https://www.youtube.com/shorts/h7jDWZiV0cE
-https://www.youtube.com/shorts/sWdnR9PexSo
-https://www.youtube.com/shorts/q7NSTKArlQ0
-https://www.youtube.com/shorts/b79QVUIf5-U
-https://www.youtube.com/shorts/3rAxOJqJh7g
-https://www.youtube.com/shorts/UpdiebZJfNc
-https://www.youtube.com/shorts/TDmXw4JI1OU
-https://www.youtube.com/shorts/WiytL8DlmbI
-https://www.youtube.com/shorts/ruXzmKtVhv4
-https://www.youtube.com/shorts/eNrt7y5cedU
-https://www.youtube.com/shorts/vkZprpKNS7o
-https://www.youtube.com/shorts/Tvrd1XsGUU8
-https://www.youtube.com/shorts/xI9na8nlgJU
-https://www.youtube.com/shorts/qqpGxT1a7d0
-https://www.youtube.com/shorts/hmcZoJ-KZ_0
-https://www.youtube.com/shorts/3j_PGyKVMyk
-https://www.youtube.com/shorts/2Rwi_Uqenqo
-https://www.youtube.com/shorts/TlrdNHfBVx8
-https://www.youtube.com/shorts/6s2gMHHdRzA
-https://www.youtube.com/shorts/VIcdSjVleOQ
-https://www.youtube.com/shorts/8yl2LUMEdZI
-https://www.youtube.com/shorts/CJAyr0zXC-0
-https://www.youtube.com/shorts/xIZ5MryjOq8
-https://www.youtube.com/shorts/rEbsdbiMtH0
-https://www.youtube.com/shorts/IT6sclCVR0M
-https://www.youtube.com/shorts/N3pgbtrraew
-https://www.youtube.com/shorts/v924ae7kY7M
-https://www.youtube.com/shorts/z6uKRGliME0
-https://www.youtube.com/shorts/38EBGnl-4eU
-https://www.youtube.com/shorts/RM47ZPaq3ds
-https://www.youtube.com/shorts/TkonjZ_QjaU
-https://www.youtube.com/shorts/PAeE-06vl6o
-https://www.youtube.com/shorts/ptCWS6OfGw0
-https://www.youtube.com/shorts/JHWHle2YSOQ
-https://www.youtube.com/shorts/aj-VRXf3VGY
-https://www.youtube.com/shorts/O_nPcqvlLjs
-https://www.youtube.com/shorts/CrfZJWxszFw
-https://www.youtube.com/shorts/rr6mjNJ3FxY
-https://www.youtube.com/shorts/ChnqTBSszQM
-https://www.youtube.com/shorts/-qPbSosyxCU
-https://www.youtube.com/shorts/Di8hWA54Lu8
-https://www.youtube.com/shorts/TiwF0YoIrYA
-https://www.youtube.com/shorts/XpRdTAjTy9s
-https://www.youtube.com/shorts/t-q16wejTFI
-https://www.youtube.com/shorts/zNXqd5E9JhM
-https://www.youtube.com/shorts/cOpwUEb7zYI
-https://www.youtube.com/shorts/HeF84__huAk
-https://www.youtube.com/shorts/8aRYcSCqYJc
-https://www.youtube.com/shorts/MAT8t7oT27M
-https://www.youtube.com/shorts/7DU4085seQU
-https://www.youtube.com/shorts/4r6Gg5vkO-c
-https://www.youtube.com/shorts/Wy17OBUwMOo
-https://www.youtube.com/shorts/11YFhVWvw_0
-https://www.youtube.com/shorts/OLpGd_-MHKk
-https://www.youtube.com/shorts/zveY5ffS-rg
-https://www.youtube.com/shorts/28f0uzvcL6Q
-https://www.youtube.com/shorts/tK_i9J8eRjc
-https://www.youtube.com/shorts/22aRjEPmBxU
-https://www.youtube.com/shorts/Oy9x8C9MyU0
-https://www.youtube.com/shorts/JD-2D7_tvKY
-https://www.youtube.com/shorts/oaQS5ys3Q3Q
-https://www.youtube.com/shorts/gWOI5lnSiDI
-https://www.youtube.com/shorts/O63bMB4-YhU
-https://www.youtube.com/shorts/nZOdPh24ToU
-https://www.youtube.com/shorts/j5gxf6LMUhE
-https://www.youtube.com/shorts/-pOTL70RBNU
-https://www.youtube.com/shorts/-ilUozldklU
-https://www.youtube.com/shorts/GjcuebI4WSE
-https://www.youtube.com/shorts/D6AWqMws_dc
-https://www.youtube.com/shorts/C_5J2s5If6Y
-https://www.youtube.com/shorts/5PJgxby0AQs
-https://www.youtube.com/shorts/a5NH2vulHHg
-https://www.youtube.com/shorts/7iRDmooAT9o
-https://www.youtube.com/shorts/UHyTIlR8DuU
-https://www.youtube.com/shorts/V9rMCoHmXUI
-https://www.youtube.com/shorts/NkXIaP013Sk
-https://www.youtube.com/shorts/U_XpHawlF08
-https://www.youtube.com/shorts/TU6a9V2wz-4
-https://www.youtube.com/shorts/9Bjs4AdXT9c
-https://www.youtube.com/shorts/D3XSzMfZnEM
-https://www.youtube.com/shorts/aNvG_yAuf-I
-https://www.youtube.com/shorts/cyThpwUEAZM
-https://www.youtube.com/shorts/BUuNPvA_Ex4
-https://www.youtube.com/shorts/es4dIwGIS38
-https://www.youtube.com/shorts/_qfxFANuD8U
-https://www.youtube.com/shorts/tyuba_y9LQo
-https://www.youtube.com/shorts/Z_9BLipQ39Q
-https://www.youtube.com/shorts/7cL86A4g1XE
-https://www.youtube.com/shorts/aT0efqZ8lws
-https://www.youtube.com/shorts/UEEDbtVJBI4
-https://www.youtube.com/shorts/EVrkxFWh278
-https://www.youtube.com/shorts/Z8lLrSw4j-s
-https://www.youtube.com/shorts/OvA1t5znHaw
-https://www.youtube.com/shorts/XEqGn_WvILg
-https://www.youtube.com/shorts/pTWYIXbsHzg
-https://www.youtube.com/shorts/XMWQd0vpiXE
-https://www.youtube.com/shorts/iuwNhmB-vFg
-https://www.youtube.com/shorts/3DQpRsCfhMA
-https://www.youtube.com/shorts/I7gvMh6LhSU
-https://www.youtube.com/shorts/spzX80KZzE0
-https://www.youtube.com/shorts/VOUfe_HxAxk
-https://www.youtube.com/shorts/NQAKjorco1I
-https://www.youtube.com/shorts/WfrhpMbyUtI
-https://www.youtube.com/shorts/sRPbSBFoIHo
-https://www.youtube.com/shorts/hcc2NL0CL98
-https://www.youtube.com/shorts/wVYLJuMSN2M
-https://www.youtube.com/shorts/iyFU4ITuO7I
-https://www.youtube.com/shorts/gh4rKDwqWFo
-https://www.youtube.com/shorts/nD_NIIihHZA
-https://www.youtube.com/shorts/68-w77Km0x8
-https://www.youtube.com/shorts/2EL5yQO6P88
-https://www.youtube.com/shorts/qpPvFmeoHDw
-https://www.youtube.com/shorts/I23GHW5h9gE
-https://www.youtube.com/shorts/6aZlSqBNMrM
-https://www.youtube.com/shorts/_-ROdyXt8EU
-https://www.youtube.com/shorts/9V7MyneqK_o
-https://www.youtube.com/shorts/zzDG_5aKi6s
-https://www.youtube.com/shorts/7WkTbaMi7Ls
-https://www.youtube.com/shorts/ZxC4-f9IbAw
-https://www.youtube.com/shorts/3haD-AX4CzQ
-https://www.youtube.com/shorts/rJBEJxuF6zU
-https://www.youtube.com/shorts/vq4W40X9p5k
-https://www.youtube.com/shorts/8bovOSzcdYo
-https://www.youtube.com/shorts/xJS6BW5zltE
-https://www.youtube.com/shorts/fg2OBbwlXIw
-https://www.youtube.com/shorts/mjp81mqZlIs
-https://www.youtube.com/shorts/gEH2M_sV4ns
-https://www.youtube.com/shorts/Iyua_w2rZlY
-https://www.youtube.com/shorts/3C7rqNhDV4c
-https://www.youtube.com/shorts/iBk-DMdRaMU
-https://www.youtube.com/shorts/QpHwWChavtM
-https://www.youtube.com/shorts/3BMIQ-E00mY
-https://www.youtube.com/shorts/9TuYHUU3iZ8
-https://www.youtube.com/shorts/YcZLucJmT-g
-https://www.youtube.com/shorts/2I7ABi885e8
-https://www.youtube.com/shorts/dwH72O3jHTg
-https://www.youtube.com/shorts/hzATLpizk3s
-https://www.youtube.com/shorts/fp6iwrQPV9c
-https://www.youtube.com/shorts/ucgiOqGs33A
-https://www.youtube.com/shorts/WLhVscPOtb0
-https://www.youtube.com/shorts/HhtRcSeiXnU
-https://www.youtube.com/shorts/W0XLu7hMhN8
-https://www.youtube.com/shorts/Ow27iGL5Jz0
-https://www.youtube.com/shorts/u9u4QWMV7Ug
-https://www.youtube.com/shorts/abNjfUDFhiU
-https://www.youtube.com/shorts/lmgD_yK1MFA
-https://www.youtube.com/shorts/2vB6WHB2FOY
-https://www.youtube.com/shorts/c2fBj_4VH_I
-https://www.youtube.com/shorts/6Rl0nm4aW94
-https://www.youtube.com/shorts/oW5lt24j4-c
-https://www.youtube.com/shorts/QKuzJY2k-qQ
-https://www.youtube.com/shorts/s7Xg6m-7eyY
-https://www.youtube.com/shorts/gzreseN850w
-https://www.youtube.com/shorts/kmesoC3dZKg
-https://www.youtube.com/shorts/r9MRmOe06Ug
-https://www.youtube.com/shorts/3FXHMyOYx0o
-https://www.youtube.com/shorts/x6LIjAgTpOg
-https://www.youtube.com/shorts/0y8sJGa12hE
-https://www.youtube.com/shorts/eSTc9P-Fr9c
-https://www.youtube.com/shorts/VeTKUZCltP8
-https://www.youtube.com/shorts/ciIKDzRPCT8
-https://www.youtube.com/shorts/setu3Dmp52g
-https://www.youtube.com/shorts/-PaujSbiY_o
-https://www.youtube.com/shorts/SrQVi4cXMBw
-https://www.youtube.com/shorts/ml7S1VQADrc
-https://www.youtube.com/shorts/WDUK1QiYhu4
-https://www.youtube.com/shorts/Ow5KKjKzCV4
-https://www.youtube.com/shorts/2ykDFNr0SPc
-https://www.youtube.com/shorts/XLPjGbNAmD4
-https://www.youtube.com/shorts/p1YLz7m7UaQ
-https://www.youtube.com/shorts/QU-CxQYH5_c
-https://www.youtube.com/shorts/7CC91h3tJjU
-https://www.youtube.com/shorts/haFGeLqc3_o
-https://www.youtube.com/shorts/f5NO2qGsC7U
-https://www.youtube.com/shorts/WxwSm7sRYQw
-https://www.youtube.com/shorts/56qtL8_gi1s
-https://www.youtube.com/shorts/YlDnFmcRVNM
-https://www.youtube.com/shorts/7uW56qmGr30
-https://www.youtube.com/shorts/gp0tjN4V52Q
-https://www.youtube.com/shorts/tHcGE8MEC_c
-https://www.youtube.com/shorts/I8qyDJ2iGQU
-https://www.youtube.com/shorts/kwSA3Wo7Rq8
-https://www.youtube.com/shorts/4vjB2_fhMHc"""
+async def main(urls: List[str], out_dir: str = "mp3_downloads"):
+    print(f"Processing {len(urls)} urls")
+    await process_urls(urls, out_dir)
 
-urls = urls.split('\n')
-
-print(f"Processing {len(urls)} urls")
-main(urls)
+if __name__ == "__main__":
+    urls = open("jayshetty.txt").read()
+    urls = ast.literal_eval(urls)
+    # Convert the URLs string to a list
+    urls = urls.split('\n')
+    
+    # Run the async main function
+    asyncio.run(main(urls))
