@@ -210,7 +210,7 @@ class SpeakerModelingLM(PreTrainedModel):
         )
 
         print('output_tokens', output_tokens.shape)
-        print(output_tokens)
+        # print(output_tokens)
 
         start_audio_idx = (output_tokens[0] == start_of_audio).nonzero(as_tuple=True)[0]
         if len(start_audio_idx) == 0:

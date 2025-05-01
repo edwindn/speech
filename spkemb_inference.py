@@ -93,7 +93,7 @@ if __name__ == "__main__":
     snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
     snac = snac.to(device)
 
-    ref_audio = "reconstructed_audio.wav"
+    ref_audio = "reference2.wav"
 
     sample_text = "Hey, this is a test of voice cloning. I wonder if I sound the same as the original? Ha, I bet you can't tell the difference."
 
@@ -115,4 +115,4 @@ if __name__ == "__main__":
             reconstructed_audio = snac.decode(codes)
     
     audio = reconstructed_audio.squeeze().cpu().numpy()
-    write("spkemb_reconstructed_audio.wav", SNAC_SAMPLE_RATE, audio)
+    write(f"cloned_{ref_audio}", SNAC_SAMPLE_RATE, audio)
