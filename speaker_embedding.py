@@ -115,7 +115,7 @@ class SpeakerModelingLM(PreTrainedModel):
             instance = cls(model.config, model)
             return instance
 
-        if load_mode == "online": # TODO fix
+        if load_mode == "online":
             model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
             instance = cls(model.config, model)
             
@@ -124,6 +124,18 @@ class SpeakerModelingLM(PreTrainedModel):
                 instance.speaker_projection.load_state_dict({
                     "linear.weight": state_dict["speaker_projection.linear.weight"]
                 })
+
+            print("\nFirst 10 weights from state_dict:")
+            for i, key in enumerate(state_dict.keys()):
+                if i >= 10:
+                    break
+                print(f"  {key}")
+                
+            print("\nFirst 10 weights from instance:")
+            for i, key in enumerate(instance.state_dict().keys()):
+                if i >= 10:
+                    break
+                print(f"  {key}")
             
             return instance
 
