@@ -60,6 +60,9 @@ def main(short_urls, out_dir="mp3_downloads"):
     for s in short_urls:
         try:
             vid = extract_video_id(s)
+            if f'{vid}.mp3' in os.listdir(out_dir):
+                print(f"Skipping {s} because it already exists")
+                continue
             print(f"Processing video ID: {vid}")
             watch = f"https://www.youtube.com/watch?v={vid}"
             mp3_url = get_mp3_link(watch)
