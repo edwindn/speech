@@ -85,8 +85,8 @@ def detokenize_codes(tokens):
     return codes
 
 if __name__ == "__main__":
-    model = SpeakerModelingLM.from_pretrained("../checkpoints/checkpoint-10000", load_mode="local").eval().to(device)
-    # model = SpeakerModelingLM.from_pretrained("edwindn/model-for-voice-cloning").eval().to(device)
+    # model = SpeakerModelingLM.from_pretrained("../checkpoints/checkpoint-10000", load_mode="local").eval().to(device)
+    model = SpeakerModelingLM.from_pretrained("edwindn/model-for-voice-cloning", load_mode="online").eval().to(device)
     tokenizer = AutoTokenizer.from_pretrained("canopylabs/orpheus-3b-0.1-pretrained")
     snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
     snac = snac.to(device)
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     assert len(sys.argv) == 2, "Please provide a reference audio file"
     ref_audio = sys.argv[1]
 
-    sample_text = "Hey, this is a test of voice cloning. I wonder if I sound the same as the original? Ha, I bet you can't tell the difference."
+    sample_text = "Hey, this is a test of voice cloning. I wonder if I sound like the original? Ha, I bet you can't tell the difference."
 
     from speechbrain.pretrained import SpeakerRecognition
     embedding_model = SpeakerRecognition.from_hparams(
