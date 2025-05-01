@@ -189,7 +189,7 @@ class SpeakerModelingLM(PreTrainedModel):
 
         start_audio_idx = (output_tokens[0] == start_of_audio).nonzero(as_tuple=True)[0]
         if len(start_audio_idx) == 0:
-            pass
+            output_tokens = output_tokens[0].tolist()
         else:
             print('start_audio_idx', start_audio_idx)
             output_tokens = output_tokens[0][start_audio_idx.item() + 1:].tolist()
