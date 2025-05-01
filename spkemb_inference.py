@@ -92,8 +92,8 @@ if __name__ == "__main__":
     snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
     snac = snac.to(device)
 
-    assert len(sys.argv) == 2, "Please provide a reference audio file"
-    ref_audio = sys.argv[1]
+    assert len(sys.argv) >= 2, "Please provide a reference audio file"
+    ref_audios = sys.argv[1:]
 
     sample_text = "Hey, this is a test of voice cloning. I wonder if I sound like the original? Ha, I bet you can't tell the difference."
 
@@ -102,17 +102,19 @@ if __name__ == "__main__":
         source="speechbrain/spkrec-ecapa-voxceleb",
         savedir="pretrained_models/spkrec-ecapa-voxceleb"
     )
-    signal, fs = torchaudio.load(ref_audio)
-    print('original sr ', fs)
-    signal = torchaudio.transforms.Resample(fs, AUDIO_EMBEDDING_SR)(signal) # 16kHz
-    speaker_embedding = embedding_model.encode_batch(signal)
-    speaker_embedding = speaker_embedding.to(device)
-    print('speaker embedding ', speaker_embedding.shape)
-
-    output_tokens = model.generate(text=sample_text, speaker_embedding=speaker_embedding)
-    codes = detokenize_codes(output_tokens)
-    with torch.inference_mode():
-            reconstructed_audio = snac.decode(codes)
     
-    audio = reconstructed_audio.squeeze().cpu().numpy()
-    write(f"cloned_{ref_audio}", SNAC_SAMPLE_RATE, audio)
+    for ref_audio in ref_audios:
+        signal, fs = torchaudio.load(ref_audio)
+        print('original sr ', fs)
+        signal = torchaudio.transforms.Resample(fs, AUDIO_EMBEDDING_SR)(signal) # 16kHz
+        speaker_embedding = embedding_model.encode_batch(signal)
+        speaker_embedding = speaker_embedding.to(device)
+        print('speaker embedding ', speaker_embedding.shape)
+
+        output_tokens = model.generate(text=sample_text, speaker_embedding=speaker_embedding)
+        codes = detokenize_codes(output_tokens)
+        with torch.inference_mode():
+                reconstructed_audio = snac.decode(codes)
+        
+        audio = reconstructed_audio.squeeze().cpu().numpy()
+        write(f"cloned_{ref_audio}", SNAC_SAMPLE_RATE, audio)

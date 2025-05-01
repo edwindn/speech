@@ -110,7 +110,7 @@ class SpeakerModelingLM(PreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path, load_mode, **kwargs):
         assert load_mode in ["local", "online", "train"]
 
-        if load_mode == "train": # orpheus pretrained model
+        if load_mode == "train": # base pretrained model
             model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
             instance = cls(model.config, model)
             return instance
@@ -314,8 +314,6 @@ if __name__ == "__main__":
     if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0]:
         wandb.init(project="speaker-embedding")
 
-    # hf_login(os.getenv("HF_TOKEN_AMUVARMA"))
-
     repo_id = "amuvarma/snac_and_embs" # codes_list, speaker_embedding, text
     snapshot_download(
         repo_id=repo_id,
@@ -330,8 +328,6 @@ if __name__ == "__main__":
     print(f'len dataset: {len(dataset)}')
 
     dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
-
-    # hf_login(os.getenv("HF_TOKEN_EDWIN"))
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
