@@ -5,7 +5,7 @@ import torch.nn as nn
 from pyannote.audio import Model, Inference
 from dotenv import load_dotenv
 import os
-from huggingface_hub import login as hf_login, snapshot_download
+from huggingface_hub import login as hf_login, snapshot_download, hf_hub_download, list_repo_files
 import librosa
 from snac import SNAC
 import multiprocessing
@@ -118,14 +118,29 @@ class SpeakerModelingLM(PreTrainedModel):
         if load_mode == "online":
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
             base_model = AutoModelForCausalLM.from_config(config)
-
-            ckpt_dir    = pretrained_model_name_or_path
-            pattern     = os.path.join(ckpt_dir, "pytorch_model-*.bin")
-            shard_paths = sorted(glob.glob(pattern))
-
-            if not shard_paths:
-                shard_paths = [os.path.join(ckpt_dir, "pytorch_model.bin")]
-
+            
+            # Download all shards
+            repo_files = list_repo_files(pretrained_model_name_or_path)
+            
+            # Filter for pytorch model bin files
+            shard_files = [f for f in repo_files if f.startswith("pytorch_model") and f.endswith(".bin")]
+            shard_files.sort()  # Sort to ensure correct order
+            
+            print(f'Found {len(shard_files)} model shards:', shard_files)
+            
+            # Download all shards
+            shard_paths = []
+            for shard_file in shard_files:
+                shard_path = hf_hub_download(
+                    repo_id=pretrained_model_name_or_path,
+                    filename=shard_file,
+                    local_dir="model_weights"
+                )
+                shard_paths.append(shard_path)
+            
+            print('Downloaded shard paths:', shard_paths)
+            
+            # Load all shards
             raw_state = {}
             for shard in shard_paths:
                 sd = torch.load(shard, map_location="cpu")
