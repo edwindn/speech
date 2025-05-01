@@ -81,6 +81,10 @@ def map_fn(batch):
     text_tokens = tokenizer(text).input_ids
     audio_tokens = batch["codes_list"]
     tokens = start + text_tokens + middle + audio_tokens + end
+
+    if len(tokens) > MAX_SEQ_LENGTH:
+        tokens = tokens[:MAX_SEQ_LENGTH]
+
     return {
         "input_ids": tokens,
         "attention_mask": [1] * len(tokens),

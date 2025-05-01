@@ -115,7 +115,7 @@ class SpeakerModelingLM(PreTrainedModel):
             instance = cls(model.config, model)
             return instance
 
-        if load_mode == "online": # TODO check
+        if load_mode == "online": # TODO fix
             model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
             instance = cls(model.config, model)
             
