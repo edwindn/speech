@@ -102,7 +102,7 @@ async def main(urls: List[str], out_dir: str = "mp3_downloads"):
     await process_urls(urls, out_dir)
 
 if __name__ == "__main__":
-    urls = open("jayshetty.txt").read()
+    urls = open("tedx.txt").read()
     urls = ast.literal_eval(urls)
     
     # Run the async main function
