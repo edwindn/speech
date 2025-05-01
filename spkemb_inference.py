@@ -87,6 +87,8 @@ def detokenize_codes(tokens):
 if __name__ == "__main__":
     # model = SpeakerModelingLM.from_pretrained("../checkpoints/checkpoint-10000", load_mode="local").eval().to(device)
     model = SpeakerModelingLM.from_pretrained("edwindn/model-for-voice-cloning", load_mode="online").eval().to(device)
+
+    exit()
     tokenizer = AutoTokenizer.from_pretrained("canopylabs/orpheus-3b-0.1-pretrained")
     snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
     snac = snac.to(device)
