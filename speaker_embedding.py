@@ -110,7 +110,7 @@ class SpeakerModelingLM(PreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path, load_mode, **kwargs):
         assert load_mode in ["local", "online", "train"]
 
-        if load_mode == "train":
+        if load_mode == "train": # orpheus pretrained model
             model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
             instance = cls(model.config, model)
             return instance
@@ -119,16 +119,10 @@ class SpeakerModelingLM(PreTrainedModel):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
             base_model = AutoModelForCausalLM.from_config(config)
             
-            # Download all shards
             repo_files = list_repo_files(pretrained_model_name_or_path)
-            
-            # Filter for pytorch model bin files
             shard_files = [f for f in repo_files if f.startswith("pytorch_model") and f.endswith(".bin")]
-            shard_files.sort()  # Sort to ensure correct order
-            
-            print(f'Found {len(shard_files)} model shards:', shard_files)
-            
-            # Download all shards
+            shard_files.sort()
+                        
             shard_paths = []
             for shard_file in shard_files:
                 shard_path = hf_hub_download(
@@ -137,21 +131,13 @@ class SpeakerModelingLM(PreTrainedModel):
                     local_dir="model_weights"
                 )
                 shard_paths.append(shard_path)
-            
-            print('Downloaded shard paths:', shard_paths)
-            
-            # Load all shards
+        
             raw_state = {}
             for shard in shard_paths:
                 sd = torch.load(shard, map_location="cpu")
                 raw_state.update(sd)
 
             instance = cls(config, base_model)
-
-            print("\nSpeaker projection weights:")
-            for k in raw_state.keys():
-                if 'speaker_projection' in k:
-                    print(f"  {k}")
             
             missing, unexpected = instance.load_state_dict(raw_state, strict=False)
             print("\nLoad results:")
