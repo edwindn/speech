@@ -107,52 +107,72 @@ class SpeakerModelingLM(PreTrainedModel):
         self.max_new_tokens = 250 * 7
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        base_model = AutoModelForCausalLM.from_config(config)
+    def from_pretrained(cls, pretrained_model_name_or_path, load_mode, **kwargs):
+        assert load_mode in ["local", "online", "train"]
 
-        ckpt_dir    = pretrained_model_name_or_path
-        pattern     = os.path.join(ckpt_dir, "pytorch_model-*.bin")
-        shard_paths = sorted(glob.glob(pattern))
+        if load_mode == "train":
+            model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            instance = cls(model.config, model)
+            return instance
 
-        if not shard_paths:
-            shard_paths = [os.path.join(ckpt_dir, "pytorch_model.bin")]
+        if load_mode == "online": # TODO check
+            model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            instance = cls(model.config, model)
+            
+            state_dict = model.state_dict()
+            if "speaker_projection.linear.weight" in state_dict:
+                instance.speaker_projection.load_state_dict({
+                    "linear.weight": state_dict["speaker_projection.linear.weight"]
+                })
+            
+            return instance
 
-        raw_state = {}
-        for shard in shard_paths:
-            sd = torch.load(shard, map_location="cpu")
-            raw_state.update(sd)
+        if load_mode == "local":
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            base_model = AutoModelForCausalLM.from_config(config)
 
-        fixed_state = {}
-        for k, v in raw_state.items():
-            if k.startswith("model."):
-                new_k = k
-                # new_k = k.replace("model.", "model.model.", 1)
-            else:
-                new_k = k
-            fixed_state[new_k] = v
+            ckpt_dir    = pretrained_model_name_or_path
+            pattern     = os.path.join(ckpt_dir, "pytorch_model-*.bin")
+            shard_paths = sorted(glob.glob(pattern))
 
-        # missing, unexpected = base_model.load_state_dict(fixed_state, strict=False)
-        # print(">>> base_model loaded. missing:", missing)
-        # print(">>>                unexpected:", unexpected)
+            if not shard_paths:
+                shard_paths = [os.path.join(ckpt_dir, "pytorch_model.bin")]
 
-        instance = cls(config, base_model)
-        missing_wrap, unexpected_wrap = instance.load_state_dict(fixed_state, strict=False)
-        print("wrapper load missing:   ", missing_wrap)
-        print("wrapper load unexpected:", unexpected_wrap)
+            raw_state = {}
+            for shard in shard_paths:
+                sd = torch.load(shard, map_location="cpu")
+                raw_state.update(sd)
 
-        for key in instance.state_dict().keys():
-            if 'lm_head.weight' in key:
-                ckpt_lm = fixed_state["model.lm_head.weight"] 
-                live_lm = instance.state_dict()[key]
-                assert torch.equal(ckpt_lm, live_lm), "lm_head.weight was not loaded correctly"
-                break
+            fixed_state = {}
+            for k, v in raw_state.items():
+                if k.startswith("model."):
+                    new_k = k
+                    # new_k = k.replace("model.", "model.model.", 1)
+                else:
+                    new_k = k
+                fixed_state[new_k] = v
 
-        ckpt_w = fixed_state["speaker_projection.linear.weight"]
-        live_w = instance.state_dict()["speaker_projection.linear.weight"]
-        assert torch.equal(ckpt_w, live_w), "speaker_projection.linear.weight was not loaded correctly"
+            # missing, unexpected = base_model.load_state_dict(fixed_state, strict=False)
+            # print(">>> base_model loaded. missing:", missing)
+            # print(">>>                unexpected:", unexpected)
 
-        return instance
+            instance = cls(config, base_model)
+            missing_wrap, unexpected_wrap = instance.load_state_dict(fixed_state, strict=False)
+            print("wrapper load missing:   ", missing_wrap)
+            print("wrapper load unexpected:", unexpected_wrap)
+
+            for key in instance.state_dict().keys():
+                if 'lm_head.weight' in key:
+                    ckpt_lm = fixed_state["model.lm_head.weight"] 
+                    live_lm = instance.state_dict()[key]
+                    assert torch.equal(ckpt_lm, live_lm), "lm_head.weight was not loaded correctly"
+                    break
+
+            ckpt_w = fixed_state["speaker_projection.linear.weight"]
+            live_w = instance.state_dict()["speaker_projection.linear.weight"]
+            assert torch.equal(ckpt_w, live_w), "speaker_projection.linear.weight was not loaded correctly"
+
+            return instance
     
     @torch.no_grad()
     def generate(
@@ -300,8 +320,8 @@ if __name__ == "__main__":
 
 
     SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
-    model = SpeakerModelingLM.from_pretrained(model_name)
-    # model = SpeakerModelingLM.from_pretrained("../checkpoints/checkpoint-10000")
+    model = SpeakerModelingLM.from_pretrained(model_name, load_mode="train")
+    # model = SpeakerModelingLM.from_pretrained("../checkpoints/checkpoint-10000", load_mode="local")
 
     training_args = TrainingArguments(
         output_dir="model-for-voice-cloning",
