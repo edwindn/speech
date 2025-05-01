@@ -144,7 +144,7 @@ class SpeakerModelingLM(PreTrainedModel):
         for key in instance.state_dict().keys():
             if 'lm_head.weight' in key:
                 print(f"Found lm_head weight: {key}")
-                ckpt_lm = fixed_state["lm_head.weight"] 
+                ckpt_lm = fixed_state["model.lm_head.weight"] 
                 live_lm = instance.state_dict()[key]
                 
                 if torch.equal(ckpt_lm, live_lm):
