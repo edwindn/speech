@@ -1,6 +1,6 @@
 import re, os, time, requests, traceback
 
-API_KEY  = "d41f55bdf1msh9495b2443887d57p1ca01djsnc292dfeca496"
+API_KEY  = "6fae47ef06msh54dcb697486c67ep17f9cfjsn54d2a7fd19df"
 API_HOST = "youtube-to-mp315.p.rapidapi.com"
 DOWNLOAD_ENDPOINT = f"https://{API_HOST}/download"
 STATUS_ENDPOINT   = f"https://{API_HOST}/status"     # we will append “/{id}”
