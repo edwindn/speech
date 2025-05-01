@@ -25,6 +25,8 @@ MAX_SEQ_LENGTH = 2048
 
 # DE-DUPLICATE CODES
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # ---------------------- #
 
 llama_token_end = 128256
@@ -258,7 +260,6 @@ if __name__ == "__main__":
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
 
