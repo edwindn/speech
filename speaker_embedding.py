@@ -255,6 +255,18 @@ class SpeakerModelingLM(PreTrainedModel):
         return out.loss, out.logits
     
 
+class ClearCacheCallback(TrainerCallback):
+    def __init__(self, n_steps=10):
+        self.n_steps = n_steps
+        self.step = 0
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step % self.n_steps == 0:
+            gc.collect()
+            torch.cuda.empty_cache()
+            if "model" in kwargs and hasattr(kwargs["model"], "trainer"):
+                kwargs["model"].trainer.accelerator.clear()
+
 
 if __name__ == "__main__":
     model_name = "canopylabs/orpheus-3b-0.1-pretrained"
@@ -274,7 +286,7 @@ if __name__ == "__main__":
     ) 
     dataset = load_dataset(repo_id, split="train")
 
-    dataset = dataset.select(range(len(dataset) // 10))
+    dataset = dataset.select(range(len(dataset) // 5))
     dataset = dataset.shuffle(seed=42)
     print(f'len dataset: {len(dataset)}')
 
@@ -289,26 +301,7 @@ if __name__ == "__main__":
 
     SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
     model = SpeakerModelingLM.from_pretrained(model_name)
-
-    # Print model layers and exit
-    print("\nModel Layers:")
-    for name, module in list(model.named_modules())[:10]:
-        if len(list(module.children())) == 0:  # Only print leaf modules
-            print(f"{name}: {type(module).__name__}")
-    print("\nExiting after printing model layers...")
-    exit()
-
-    class ClearCacheCallback(TrainerCallback):
-        def __init__(self, n_steps=10):
-            self.n_steps = n_steps
-            self.step = 0
-
-        def on_step_end(self, args, state, control, **kwargs):
-            if state.global_step % self.n_steps == 0:
-                gc.collect()
-                torch.cuda.empty_cache()
-                if "model" in kwargs and hasattr(kwargs["model"], "trainer"):
-                    kwargs["model"].trainer.accelerator.clear()
+    # model = SpeakerModelingLM.from_pretrained("../checkpoints/checkpoint-10000")
 
     training_args = TrainingArguments(
         output_dir="model-for-voice-cloning",
