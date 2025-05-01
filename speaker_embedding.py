@@ -171,9 +171,15 @@ class SpeakerModelingLM(PreTrainedModel):
         attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=device)
 
         output_tokens =  self.model.generate(
-            inputs_embeds=inputs_embeds, # make sure skip embed step
+            inputs_embeds=inputs_embeds, # !! make sure skip embed step
             attention_mask=attention_mask,
-            **kwargs
+            temperature=0.6,
+            top_p=0.95,
+            top_k=50,
+            repetition_penalty=1.1,
+            do_sample=True,
+            max_new_tokens=self.max_new_tokens,
+            eos_token_id=self.end_of_audio,
         )
 
         start_audio_idx = (output_tokens[0] == start_of_audio).nonzero(as_tuple=True)[0]
