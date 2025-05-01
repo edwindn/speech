@@ -120,10 +120,12 @@ class SpeakerModelingLM(PreTrainedModel):
             instance = cls(model.config, model)
             
             state_dict = model.state_dict()
-            if "speaker_projection.linear.weight" in state_dict:
-                instance.speaker_projection.load_state_dict({
-                    "linear.weight": state_dict["speaker_projection.linear.weight"]
-                })
+            state_dict["model.lm_head.weight"] = state_dict["lm_head.weight"]
+
+            print("\nSpeaker projection weights:")
+            for k in state_dict.keys():
+                if 'speaker_projection' in k:
+                    print(f"  {k}")
 
             renamed_state_dict = {}
             for k, v in state_dict.items():
