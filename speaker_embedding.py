@@ -139,10 +139,10 @@ class SpeakerModelingLM(PreTrainedModel):
 
         instance = cls(config, base_model)
 
-        proj_keys = [k for k in instance.state_dict().keys() if k.startswith("speaker_projection.")]
-        print("=== speaker_projection keys ===")
-        for k in proj_keys:
-            print(" •", k)
+        # proj_keys = [k for k in instance.state_dict().keys() if k.startswith("speaker_projection.")]
+        # print("=== speaker_projection keys ===")
+        # for k in proj_keys:
+        #     print(" •", k)
 
         return instance
     
@@ -167,8 +167,8 @@ class SpeakerModelingLM(PreTrainedModel):
         print('embds_1', embds_1.shape)
         print('speaker_projection', speaker_projection.shape)
         print('embds_2', embds_2.shape)
-        inputs_embeds = torch.cat([embds_1.squeeze(), speaker_projection, embds_2.squeeze()], dim=0).unsqueeze(0)
-        attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=device)
+        inputs_embeds = torch.cat([embds_1.squeeze(), speaker_projection, embds_2.squeeze()], dim=0).unsqueeze(0).to(device)
+        attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=device).to(device)
 
         output_tokens =  self.model.generate(
             inputs_embeds=inputs_embeds, # !! make sure skip embed step
