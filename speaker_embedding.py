@@ -184,8 +184,10 @@ class SpeakerModelingLM(PreTrainedModel):
             eos_token_id=self.end_of_audio,
         )
 
+        print('output_tokens', output_tokens.shape)
+
         start_audio_idx = (output_tokens[0] == start_of_audio).nonzero(as_tuple=True)[0]
-        output_tokens = output_tokens[0][start_audio_idx + 1:].tolist()
+        output_tokens = output_tokens[0][start_audio_idx.item() + 1:].tolist()
         print('output_tokens length:', len(output_tokens))
 
         if output_tokens[-1] == end_of_audio:
