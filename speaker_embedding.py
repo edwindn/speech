@@ -125,17 +125,17 @@ class SpeakerModelingLM(PreTrainedModel):
 
         fixed_state = {}
         for k, v in raw_state.items():
-            if k.startswith("model.model."):
-                new_k = k.replace("model.model.", "model.", 1)
+            if k.startswith("model."):
+                new_k = k.replace("model.", "model.model.", 1)
             else:
                 new_k = k
             fixed_state[new_k] = v
         
         fixed_state["lm_head.weight"] = raw_state["model.lm_head.weight"]
 
-        missing, unexpected = base_model.load_state_dict(fixed_state, strict=False)
-        print(">>> base_model loaded. missing:", missing)
-        print(">>>                unexpected:", unexpected)
+        # missing, unexpected = base_model.load_state_dict(fixed_state, strict=False)
+        # print(">>> base_model loaded. missing:", missing)
+        # print(">>>                unexpected:", unexpected)
 
         instance = cls(config, base_model)
         missing_wrap, unexpected_wrap = instance.load_state_dict(fixed_state, strict=False)
