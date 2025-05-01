@@ -126,7 +126,8 @@ class SpeakerModelingLM(PreTrainedModel):
         fixed_state = {}
         for k, v in raw_state.items():
             if k.startswith("model."):
-                new_k = k.replace("model.", "model.model.", 1)
+                pass
+                # new_k = k.replace("model.", "model.model.", 1)
             else:
                 new_k = k
             fixed_state[new_k] = v
