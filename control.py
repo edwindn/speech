@@ -64,9 +64,8 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 
-# dataset = dataset.select(range(len(dataset) // 10))
+dataset = dataset.select(range(len(dataset) // 5))
 dataset = dataset.shuffle(seed=42)
-dataset = dataset.select(range(10000))
 print(f'len dataset: {len(dataset)}')
 
 # hf_login(os.getenv("HF_TOKEN_EDWIN"))
