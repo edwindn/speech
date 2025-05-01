@@ -99,6 +99,7 @@ if __name__ == "__main__":
     sclassifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
     signal, fs = torchaudio.load(ref_audio)
     speaker_embedding = sclassifier.encode_batch(signal)
+    speaker_embedding = speaker_embedding.to(device)
     print('speaker embedding ', speaker_embedding.shape)
 
     output_tokens = model.generate(text=sample_text, speaker_embedding=speaker_embedding)

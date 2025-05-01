@@ -153,12 +153,14 @@ class SpeakerModelingLM(PreTrainedModel):
         speaker_embedding: torch.Tensor,
         **kwargs
     ):
+        device = next(self.parameters()).device
+        speaker_embedding = speaker_embedding.to(device)
         
         text_tokens = tokenizer(text).input_ids
         input_ids_1 = [start_of_human] + text_tokens + [end_of_text, end_of_human, start_of_speaker]
         input_ids_2 = [end_of_speaker, start_of_gpt, start_of_audio]
-        input_ids_1 = torch.tensor(input_ids_1, dtype=torch.long).unsqueeze(0).to(self.device)
-        input_ids_2 = torch.tensor(input_ids_2, dtype=torch.long).unsqueeze(0).to(self.device)
+        input_ids_1 = torch.tensor(input_ids_1, dtype=torch.long).unsqueeze(0).to(device)
+        input_ids_2 = torch.tensor(input_ids_2, dtype=torch.long).unsqueeze(0).to(device)
         embds_1 = self.embedding_layer(input_ids_1)
         embds_2 = self.embedding_layer(input_ids_2)
 
@@ -167,8 +169,8 @@ class SpeakerModelingLM(PreTrainedModel):
         print('embds_1', embds_1.shape)
         print('speaker_projection', speaker_projection.shape)
         print('embds_2', embds_2.shape)
-        inputs_embeds = torch.cat([embds_1.squeeze(), speaker_projection, embds_2.squeeze()], dim=0).unsqueeze(0).to(device)
-        attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=device).to(device)
+        inputs_embeds = torch.cat([embds_1.squeeze(), speaker_projection, embds_2.squeeze()], dim=0).unsqueeze(0)
+        attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=device)
 
         output_tokens =  self.model.generate(
             inputs_embeds=inputs_embeds, # !! make sure skip embed step
