@@ -93,12 +93,17 @@ if __name__ == "__main__":
 
     ref_audio = "reconstructed_audio.wav"
 
-    sample_text = "Hey, this is a test of voice cloning. I wonder if I sound the same as the original?"
+    sample_text = "Hey, this is a test of voice cloning. I wonder if I sound the same as the original? Ha, I bet you can't tell the difference."
 
-    from speechbrain.inference.speaker import EncoderClassifier
-    sclassifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
+    from speechbrain.pretrained import SpeakerRecognition
+    embedding_model = SpeakerRecognition.from_hparams(
+        source="speechbrain/spkrec-ecapa-voxceleb",
+        savedir="pretrained_models/spkrec-ecapa-voxceleb"
+    )
     signal, fs = torchaudio.load(ref_audio)
-    speaker_embedding = sclassifier.encode_batch(signal)
+    print('original sr ', fs)
+    signal = torchaudio.transforms.Resample(fs, AUDIO_EMBEDDING_SR)(signal) # 16kHz
+    speaker_embedding = embedding_model.encode_batch(signal)
     speaker_embedding = speaker_embedding.to(device)
     print('speaker embedding ', speaker_embedding.shape)
 

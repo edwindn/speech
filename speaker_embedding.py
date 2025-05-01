@@ -140,9 +140,10 @@ class SpeakerModelingLM(PreTrainedModel):
         instance = cls(config, base_model)
 
         # proj_keys = [k for k in instance.state_dict().keys() if k.startswith("speaker_projection.")]
-        # print("=== speaker_projection keys ===")
-        # for k in proj_keys:
-        #     print(" •", k)
+        proj_keys = [k for k in fixed_state.keys() if k.startswith("speaker_projection.")]
+        print("=== speaker_projection keys ===")
+        for k in proj_keys:
+            print(" •", k)
 
         return instance
     
