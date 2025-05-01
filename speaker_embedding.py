@@ -139,11 +139,27 @@ class SpeakerModelingLM(PreTrainedModel):
 
         instance = cls(config, base_model)
 
-        # proj_keys = [k for k in instance.state_dict().keys() if k.startswith("speaker_projection.")]
         proj_keys = [k for k in fixed_state.keys() if k.startswith("speaker_projection.")]
-        print("=== speaker_projection keys ===")
+        print("=== loaded speaker_projection keys ===")
         for k in proj_keys:
             print(" •", k)
+
+        proj_keys = [k for k in instance.state_dict().keys() if k.startswith("speaker_projection.")]
+        print("=== instance speaker_projection keys ===")
+        for k in proj_keys:
+            print(" •", k)
+
+        # Check if speaker projection weights match between fixed state and instance
+        if "speaker_projection.linear.weight" in fixed_state:
+            fixed_weight = fixed_state["speaker_projection.linear.weight"]
+            instance_weight = instance.state_dict()["speaker_projection.linear.weight"]
+            
+            if torch.allclose(fixed_weight, instance_weight):
+                print("✓ speaker_projection.linear.weight tensors match")
+            else:
+                print("✗ speaker_projection.linear.weight tensors differ")
+                print("  fixed shape:", fixed_weight.shape)
+                print("  instance shape:", instance_weight.shape)
 
         return instance
     
