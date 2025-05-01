@@ -62,6 +62,5 @@ end = [end_of_audio, end_of_gpt]
 
 model = SpeakerModelingLM.from_pretrained(model_name).eval().to(device)
 
-exit()
 model.push_to_hub("edwindn/model-for-voice-cloning", safe_serialization=False)
 print("Model uploaded successfully!")

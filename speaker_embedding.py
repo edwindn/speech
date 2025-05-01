@@ -131,8 +131,6 @@ class SpeakerModelingLM(PreTrainedModel):
             else:
                 new_k = k
             fixed_state[new_k] = v
-        
-        fixed_state["lm_head.weight"] = raw_state["model.lm_head.weight"]
 
         # missing, unexpected = base_model.load_state_dict(fixed_state, strict=False)
         # print(">>> base_model loaded. missing:", missing)
