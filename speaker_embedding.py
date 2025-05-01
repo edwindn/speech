@@ -116,27 +116,29 @@ class SpeakerModelingLM(PreTrainedModel):
             return instance
 
         if load_mode == "online":
-            model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            instance = cls(model.config, model)
-            
-            state_dict = model.state_dict()
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            base_model = AutoModelForCausalLM.from_config(config)
 
-            renamed_state_dict = {}
-            for k, v in state_dict.items():
-                if k.startswith("model."):
-                    new_k = k.replace("model.", "model.model.", 1)
-                    renamed_state_dict[new_k] = v
-                else:
-                    renamed_state_dict[k] = v
+            ckpt_dir    = pretrained_model_name_or_path
+            pattern     = os.path.join(ckpt_dir, "pytorch_model-*.bin")
+            shard_paths = sorted(glob.glob(pattern))
 
-            state_dict["model.lm_head.weight"] = state_dict["lm_head.weight"]
+            if not shard_paths:
+                shard_paths = [os.path.join(ckpt_dir, "pytorch_model.bin")]
+
+            raw_state = {}
+            for shard in shard_paths:
+                sd = torch.load(shard, map_location="cpu")
+                raw_state.update(sd)
+
+            instance = cls(config, base_model)
 
             print("\nSpeaker projection weights:")
-            for k in renamed_state_dict.keys():
+            for k in raw_state.keys():
                 if 'speaker_projection' in k:
                     print(f"  {k}")
             
-            missing, unexpected = instance.load_state_dict(renamed_state_dict, strict=False)
+            missing, unexpected = instance.load_state_dict(raw_state, strict=False)
             print("\nLoad results:")
             print("  Missing:", missing)
             print("  Unexpected:", unexpected)
