@@ -167,7 +167,7 @@ class SpeakerModelingLM(PreTrainedModel):
         print('embds_1', embds_1.shape)
         print('speaker_projection', speaker_projection.shape)
         print('embds_2', embds_2.shape)
-        inputs_embeds = torch.cat([embds_1.squeeze(), speaker_projection, embds_2.squeeze()], dim=0)
+        inputs_embeds = torch.cat([embds_1.squeeze(), speaker_projection, embds_2.squeeze()], dim=0).unsqueeze(0)
         attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=device)
 
         output_tokens =  self.model.generate(
