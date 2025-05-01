@@ -125,17 +125,18 @@ class SpeakerModelingLM(PreTrainedModel):
                     "linear.weight": state_dict["speaker_projection.linear.weight"]
                 })
 
-            print("\nFirst 10 weights from state_dict:")
-            for i, key in enumerate(state_dict.keys()):
-                if i >= 10:
-                    break
-                print(f"  {key}")
-                
-            print("\nFirst 10 weights from instance:")
-            for i, key in enumerate(instance.state_dict().keys()):
-                if i >= 10:
-                    break
-                print(f"  {key}")
+            renamed_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith("model."):
+                    new_k = k.replace("model.", "model.model.", 1)
+                    renamed_state_dict[new_k] = v
+                else:
+                    renamed_state_dict[k] = v
+            
+            missing, unexpected = instance.load_state_dict(renamed_state_dict, strict=False)
+            print("\nLoad results:")
+            print("  Missing:", missing)
+            print("  Unexpected:", unexpected)
             
             return instance
 
