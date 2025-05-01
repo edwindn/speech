@@ -104,8 +104,6 @@ async def main(urls: List[str], out_dir: str = "mp3_downloads"):
 if __name__ == "__main__":
     urls = open("jayshetty.txt").read()
     urls = ast.literal_eval(urls)
-    # Convert the URLs string to a list
-    urls = urls.split('\n')
     
     # Run the async main function
     asyncio.run(main(urls))
