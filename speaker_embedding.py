@@ -120,12 +120,6 @@ class SpeakerModelingLM(PreTrainedModel):
             instance = cls(model.config, model)
             
             state_dict = model.state_dict()
-            state_dict["model.lm_head.weight"] = state_dict["lm_head.weight"]
-
-            print("\nSpeaker projection weights:")
-            for k in state_dict.keys():
-                if 'speaker_projection' in k:
-                    print(f"  {k}")
 
             renamed_state_dict = {}
             for k, v in state_dict.items():
@@ -134,6 +128,13 @@ class SpeakerModelingLM(PreTrainedModel):
                     renamed_state_dict[new_k] = v
                 else:
                     renamed_state_dict[k] = v
+
+            state_dict["model.lm_head.weight"] = state_dict["lm_head.weight"]
+
+            print("\nSpeaker projection weights:")
+            for k in renamed_state_dict.keys():
+                if 'speaker_projection' in k:
+                    print(f"  {k}")
             
             missing, unexpected = instance.load_state_dict(renamed_state_dict, strict=False)
             print("\nLoad results:")
