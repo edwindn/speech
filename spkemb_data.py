@@ -85,7 +85,7 @@ dataset = dataset.shuffle(seed=42)
 
 print(f'len dataset: {len(dataset)}')
 
-dataset = dataset.map(map_fn, num_proc=10, batched=False, remove_columns=dataset.column_names)
+dataset = dataset.map(map_fn, num_proc=50, batched=False, remove_columns=dataset.column_names)
 
 # Calculate average length of input_ids
 avg_length = sum(len(item['input_ids']) for item in dataset) / len(dataset)
