@@ -264,7 +264,7 @@ class SpeakerModelingLM(PreTrainedModel):
         print('model_inputs', model_inputs.shape)
 
         for ix, id in enumerate(placeholder_ids):
-            model_inputs[id] = speaker_projections[ix]
+            model_inputs[:, id, :] = speaker_projections[ix, :]
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
             print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
