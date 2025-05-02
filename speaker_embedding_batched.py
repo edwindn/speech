@@ -246,22 +246,17 @@ class SpeakerModelingLM(PreTrainedModel):
         device = next(self.parameters()).device
         input_ids, speaker_embeddings = input_ids.to(device), speaker_embeddings.to(device)
 
-        print('input_ids', input_ids.shape)
-        print('speaker_embeddings', speaker_embeddings.shape)
-
         input_ids[input_ids == -100] = pad_token
         placeholder_ids = (input_ids == pad_token).nonzero(as_tuple=True)[1]
         assert len(placeholder_ids) == B, "Placeholder ids must be equal to batch size"
 
         speaker_projections = self.speaker_projection(speaker_embeddings)
-        print('speaker_projections', speaker_projections.shape)
         
         labels = input_ids.clone()
         for id in placeholder_ids:
             labels[:, id] = -100
 
         model_inputs = self.embedding_layer(input_ids)
-        print('model_inputs', model_inputs.shape)
 
         for ix, id in enumerate(placeholder_ids):
             model_inputs[:, id, :] = speaker_projections[ix, :]
