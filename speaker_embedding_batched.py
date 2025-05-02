@@ -59,24 +59,6 @@ end = [end_of_audio, end_of_gpt]
 
 tokenizer = AutoTokenizer.from_pretrained("canopylabs/orpheus-3b-0.1-pretrained")
 
-def map_fn(batch):
-    text = batch["text"]
-    text_tokens = tokenizer(text).input_ids
-
-    audio_tokens = batch["codes_list"]
-    audio_tokens = torch.tensor(audio_tokens)
-    c0 = audio_tokens[::7]
-    indices = torch.where(c0[:-1] == c0[1:])[0]
-    if len(indices) > 0:
-        mask_indices = (indices.unsqueeze(1) * 7 + torch.arange(7, device=indices.device)).flatten()
-        mask = torch.ones(len(audio_tokens), dtype=torch.bool, device=audio_tokens.device)
-        mask[mask_indices] = False
-        audio_tokens = audio_tokens[mask]
-
-    batch["text"] = text_tokens
-    batch["codes_list"] = audio_tokens.tolist()
-    return batch
-
 class ProjectionLayer(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
@@ -105,6 +87,8 @@ class SpeakerModelingLM(PreTrainedModel):
 
         self.end_of_audio = end_of_audio
         self.max_new_tokens = 250 * 7
+
+        self.batching = None
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, load_mode, **kwargs):
@@ -251,16 +235,16 @@ class SpeakerModelingLM(PreTrainedModel):
 
     def forward(
             self,
-            codes_list: torch.Tensor, # audio
-            speaker_embedding: torch.Tensor,
-            text: torch.Tensor,
+            input_ids: torch.Tensor,
+            speaker_embeddings: torch.Tensor,
             **kwargs
         ):
 
+        speaker_embeddings = speaker_embeddings.view(-1, SPEAKER_EMBEDDING_DIM)
+        B, _ = speaker_embeddings.size()
+        
         device = next(self.parameters()).device
-        codes_list, speaker_embedding, text = codes_list.to(device), speaker_embedding.to(device), text.to(device)
-    
-        B, _ = codes_list.size()
+        input_ids, speaker_embeddings = input_ids.to(device), speaker_embeddings.to(device)
 
         start_embedding  = self.embedding_layer(self.start_tokens.to(device))
         middle_embedding_1 = self.embedding_layer(self.middle_tokens_1.to(device))
@@ -322,7 +306,6 @@ if __name__ == "__main__":
         max_workers=NUM_WORKERS,
     ) 
     dataset = load_dataset(repo_id, split="train")
-
     dataset = dataset.shuffle(seed=42)
     print(f'len dataset: {len(dataset)}')
 

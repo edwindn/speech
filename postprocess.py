@@ -7,6 +7,11 @@ from speechbrain.pretrained import SpeakerRecognition
 import time
 import torchaudio
 
+
+"""
+load in downloaded mp3 videos and transcribe
+"""
+
 files = [f for f in os.listdir('mp3_downloads') if f.endswith('.mp3')]
 files
 
