@@ -110,8 +110,8 @@ def process_chunk(dataset_chunk, dcix=0):
                 "speaker_embeddings": last_embs
             })
 
-            #if random.random() < 0.01:
-            print(f"Chunk {len(train_dataset_chunk)} for dataset chunk {dcix}: {len(last_chunk)}")
+            if random.random() < 0.001:
+                print(f"Chunk {len(train_dataset_chunk)} for dataset chunk {dcix}: {len(last_chunk)}", flush=True)
 
             last_chunk = input_ids
             last_embs = speaker_embedding
