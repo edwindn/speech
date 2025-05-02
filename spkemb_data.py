@@ -5,9 +5,12 @@ from transformers import AutoTokenizer
 import os
 from tqdm import tqdm
 import random
+import multiprocessing as mp
+from functools import partial
 
 NUM_WORKERS = os.cpu_count()
 MAX_SEQ_LENGTH = 8192
+NUM_DS_CHUNKS = 10
 
 tokenizer = AutoTokenizer.from_pretrained("canopylabs/orpheus-3b-0.1-pretrained")
 
@@ -116,8 +119,25 @@ def process_chunk(dataset_chunk, dcix=0):
 
     return train_dataset_chunk
 
-train_dataset = process_chunk(dataset)
+# train_dataset = process_chunk(dataset)
+# train_dataset = Dataset.from_list(train_dataset)
+
+dataset_chunks = [dataset.shard(num_shards=NUM_DS_CHUNKS, index=i) for i in range(NUM_DS_CHUNKS)]
+pool = mp.Pool(processes=NUM_DS_CHUNKS)
+try:
+    process_chunk_with_index = partial(process_chunk)
+    results = pool.starmap(process_chunk_with_index, [(chunk, i) for i, chunk in enumerate(dataset_chunks)])
+finally:
+    pool.close()
+    pool.join()
+
+train_dataset = []
+for result in results:
+    train_dataset.extend(result)
+
 train_dataset = Dataset.from_list(train_dataset)
+
+print(f"train_dataset: {len(train_dataset)}")
 
 login(os.getenv("HF_TOKEN"))
 
