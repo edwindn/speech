@@ -5,7 +5,7 @@ import os
 all_ds = []
 
 for i in range(10):
-    snapshot_download(repo_id=f"edwindn/voice_cloning_dataset_{i}", repo_type="dataset", num_workers=os.cpu_count())
+    snapshot_download(repo_id=f"edwindn/voice_cloning_dataset_{i}", repo_type="dataset", max_workers=os.cpu_count())
     ds = load_dataset(f"edwindn/voice_cloning_dataset_{i}", split=f"train")
     all_ds.append(ds)
 
