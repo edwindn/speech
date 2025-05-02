@@ -291,12 +291,9 @@ class ClearCacheCallback(TrainerCallback):
 
 if __name__ == "__main__":
     model_name = "canopylabs/orpheus-3b-0.1-pretrained"
+    output_dir = "model-for-voice-cloning-0.2"
 
-    # Only initialize wandb on the master GPU
-    if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0]:
-        wandb.init(project="speaker-embedding")
-
-    repo_id = "amuvarma/snac_and_embs" # codes_list, speaker_embedding, text
+    repo_id = "edwindn/voice_cloning_dataset" # input_ids, speaker_embedding
     snapshot_download(
         repo_id=repo_id,
         repo_type="dataset",
@@ -307,19 +304,19 @@ if __name__ == "__main__":
     dataset = dataset.shuffle(seed=42)
     print(f'len dataset: {len(dataset)}')
 
-    dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False)
-
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     print(f"Using device: {device}")
 
+    if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0]:
+        wandb.init(project="speaker-embedding")
 
     SpeakerModelingLM.register_for_auto_class("AutoModelForCausalLM")
     model = SpeakerModelingLM.from_pretrained(model_name, load_mode="train")
     # model = SpeakerModelingLM.from_pretrained("../checkpoints/checkpoint-10000", load_mode="local")
 
     training_args = TrainingArguments(
-        output_dir="model-for-voice-cloning",
+        output_dir=output_dir,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
         learning_rate=2e-5,
@@ -347,5 +344,5 @@ if __name__ == "__main__":
     trainer.train()
 
     print("saving")
-    trainer.push_to_hub("edwindn/model-for-voice-cloning", safe_serialization=False)
+    trainer.push_to_hub(output_dir, safe_serialization=False)
 

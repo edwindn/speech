@@ -28,8 +28,6 @@ SNAC_SAMPLE_RATE = 24000
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-model_name = "edwindn/llama-voice-cloning"
-
 # ---------------------- #
 
 llama_token_end = 128256
