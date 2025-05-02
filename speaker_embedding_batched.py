@@ -258,7 +258,7 @@ class SpeakerModelingLM(PreTrainedModel):
         
         labels = input_ids.clone()
         for id in placeholder_ids:
-            labels[id] = -100
+            labels[:, id] = -100
 
         model_inputs = self.embedding_layer(input_ids)
         print('model_inputs', model_inputs.shape)
