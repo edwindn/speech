@@ -137,23 +137,28 @@ if __name__ == "__main__":
     from datasets import Dataset
     from huggingface_hub import login
 
+    print(0)
+
     # ensure fork start on Linux/macOS so we inherit memory without re‑importing
     try:
         mp.set_start_method('fork', force=True)
     except RuntimeError:
         pass
-
+    
+    print(1)
     # 1) split into HF shards
     hf_shards = [
         dataset.shard(num_shards=NUM_DS_CHUNKS, index=i)
         for i in range(NUM_DS_CHUNKS)
     ]
 
+    print(2)
     # 2) convert each to a plain Python list of dicts
     shard_lists = [shard[:] for shard in hf_shards]
     # free the Arrow tables
     del hf_shards
 
+    print(3)
     # 3) process all shards in parallel, passing only Python lists into workers
     with mp.Pool(processes=NUM_DS_CHUNKS) as pool:
         # each worker runs process_chunk(shard_list, idx)
@@ -162,20 +167,24 @@ if __name__ == "__main__":
             [(shard_lists[i], i) for i in range(len(shard_lists))]
         )
 
+    print(4)
     # 4) flatten list-of-lists into one big list of chunked examples
     all_chunks = []
     for chunked in results:
         all_chunks.extend(chunked)
     del results, shard_lists  # free memory
 
+    print(5)
     # 5) build HF Dataset & push
     print("creating dataset", flush=True)
     train_dataset = Dataset.from_list(all_chunks)
     print(f"train_dataset: {len(train_dataset)}", flush=True)
 
+    print(6)
     login()  # your HF credentials
     train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
 
+    print(7)
     exit()
 
     mp.set_start_method('fork', force=True)
