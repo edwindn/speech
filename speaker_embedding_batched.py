@@ -21,7 +21,7 @@ SPEAKER_EMBEDDING_DIM = 192
 LLAMA_EMBEDDING_DIM = 3072
 AUDIO_EMBEDDING_SR = 16000
 NUM_WORKERS = os.cpu_count()
-MAX_SEQ_LENGTH = 4096
+MAX_SEQ_LENGTH = 3072
 
 # DE-DUPLICATE CODES
 
@@ -320,12 +320,11 @@ if __name__ == "__main__":
         num_train_epochs=1,
         save_steps=10000,
         bf16=True,
+        fsdp=["auto_wrap"],
         logging_dir="logs",
         logging_steps=1,
         remove_unused_columns=False,
         report_to="wandb" if int(os.environ.get("LOCAL_RANK", -1)) in [-1, 0] else None,
-        dataloader_num_workers=4,
-        optim="adamw_torch_fused",
         save_safetensors=False,
     )
 

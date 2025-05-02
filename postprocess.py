@@ -116,9 +116,6 @@ def transcribe_to_txt(audio_path: str, **scribe_kwargs):
 
 def diarize_and_transcribe(
     audio_path: str,
-    out_dir: str = "audio_dataset",
-    out_audio_name: str = "test.mp3",
-    out_txt_name: str = "test.txt"
 ):
     """
     1) Diarize audio_path
@@ -126,7 +123,6 @@ def diarize_and_transcribe(
     3) Extract & concatenate that speaker's audio
     4) Save new audio + its plain-text transcript
     """
-    os.makedirs(out_dir, exist_ok=True)
 
     segments = diarize_audio(audio_path)
 
