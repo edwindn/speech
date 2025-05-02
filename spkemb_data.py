@@ -82,6 +82,9 @@ snapshot_download(
 ) 
 dataset = load_dataset(repo_id, split="train")
 dataset = dataset.shuffle(seed=42)
+
+dataset = dataset.select(range(10000))
+
 print(f'len dataset: {len(dataset)}')
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False, remove_columns=dataset.column_names)
@@ -129,6 +132,9 @@ pool = mp.Pool(processes=NUM_DS_CHUNKS)
 try:
     process_chunk_with_index = partial(process_chunk)
     results = pool.starmap(process_chunk_with_index, [(chunk, i) for i, chunk in enumerate(dataset_chunks)])
+except Exception as e:
+    print(f"Error in multiprocessing: {e}", flush=True)
+    raise e
 finally:
     pool.close()
     pool.join()
@@ -143,4 +149,4 @@ print(f"train_dataset: {len(train_dataset)}")
 
 login(os.getenv("HF_TOKEN"))
 
-train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
+#train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
