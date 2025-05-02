@@ -87,6 +87,7 @@ print(f'len dataset: {len(dataset)}')
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False, remove_columns=dataset.column_names)
 
 def process_chunk(dataset_chunk, dcix=0):
+    print(f"Starting process_chunk {dcix} with {len(dataset_chunk)} items", flush=True)
     # length of chunk = len(text) + len(codes_list) + 1 + 9 = len(input_ids)
 
     train_dataset_chunk = []
@@ -110,7 +111,7 @@ def process_chunk(dataset_chunk, dcix=0):
                 "speaker_embeddings": last_embs
             })
 
-            if random.random() < 0.001:
+            if random.random() < 0.01:
                 print(f"Chunk {len(train_dataset_chunk)} for dataset chunk {dcix}: {len(last_chunk)}", flush=True)
 
             last_chunk = input_ids
