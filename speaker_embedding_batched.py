@@ -248,10 +248,8 @@ class SpeakerModelingLM(PreTrainedModel):
 
         print('input_ids', input_ids.shape)
         print('speaker_embeddings', speaker_embeddings.shape)
-        
-        print('number of -100 indices:', (input_ids == -100).sum().item())
-        print('number of pad_token indices:', (input_ids == pad_token).sum().item())
 
+        input_ids[input_ids == -100] = pad_token
         placeholder_ids = (input_ids == pad_token).nonzero(as_tuple=True)[1]
         assert len(placeholder_ids) == B, "Placeholder ids must be equal to batch size"
 
