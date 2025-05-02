@@ -149,6 +149,6 @@ train_dataset = Dataset.from_list(train_dataset)
 
 print(f"train_dataset: {len(train_dataset)}")
 
-login(os.getenv("HF_TOKEN"))
+login()
 
 #train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)

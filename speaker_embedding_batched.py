@@ -246,25 +246,21 @@ class SpeakerModelingLM(PreTrainedModel):
         device = next(self.parameters()).device
         input_ids, speaker_embeddings = input_ids.to(device), speaker_embeddings.to(device)
 
-        start_embedding  = self.embedding_layer(self.start_tokens.to(device))
-        middle_embedding_1 = self.embedding_layer(self.middle_tokens_1.to(device))
-        middle_embedding_2 = self.embedding_layer(self.middle_tokens_2.to(device))
-        end_embedding    = self.embedding_layer(self.end_tokens.to(device))
+        print('input_ids', input_ids.shape)
+        print('speaker_embeddings', speaker_embeddings.shape)
+        placeholder_ids = (input_ids == -100).nonzero(as_tuple=True)[1]
+        assert len(placeholder_ids) == B, "Placeholder ids must be equal to batch size"
 
-        speaker_embedding = self.speaker_projection(speaker_embedding).unsqueeze(1)
-        audio_embedding = self.embedding_layer(codes_list)
-        text_embedding = self.embedding_layer(text)
+        speaker_projections = self.speaker_projection(speaker_embeddings)
+        print('speaker_projections', speaker_projections.shape)
+        
+        labels = input_ids.clone()
 
-        model_inputs = torch.cat([start_embedding, text_embedding, middle_embedding_1,
-                                  speaker_embedding, middle_embedding_2, audio_embedding, end_embedding], dim=1)
+        for id in placeholder_ids:
+            input_ids[id] = speaker_projections[id]
 
-        start_ids  = self.start_tokens.repeat(B, 1).to(device)
-        middle_ids_1 = self.middle_tokens_1.repeat(B, 1).to(device)
-        middle_ids_2 = self.middle_tokens_2.repeat(B, 1).to(device)
-        end_ids    = self.end_tokens.repeat(B, 1).to(device)
-        pad_idx    = torch.full((B, 1), -100, dtype=text.dtype, device=device)
-
-        labels = torch.cat([start_ids, text, middle_ids_1, pad_idx, middle_ids_2, codes_list, end_ids], dim=1)
+        model_inputs = self.embedding_layer(input_ids)
+        print('model_inputs', model_inputs.shape)
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
             print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
