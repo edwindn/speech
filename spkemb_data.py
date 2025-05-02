@@ -8,7 +8,7 @@ import random
 import multiprocessing as mp
 from functools import partial
 
-NUM_WORKERS = os.cpu_count()
+NUM_WORKERS = min(os.cpu_count(), 50)
 MAX_SEQ_LENGTH = 8192
 NUM_DS_CHUNKS = 50
 
@@ -130,27 +130,28 @@ def process_chunk(dataset_chunk, dcix=0):
 # train_dataset = process_chunk(dataset)
 # train_dataset = Dataset.from_list(train_dataset)
 
-dataset_chunks = [dataset.shard(num_shards=NUM_DS_CHUNKS, index=i) for i in range(NUM_DS_CHUNKS)]
-pool = mp.Pool(processes=NUM_DS_CHUNKS)
-try:
-    process_chunk_with_index = partial(process_chunk)
-    results = pool.starmap(process_chunk_with_index, [(chunk, i) for i, chunk in enumerate(dataset_chunks)])
-except Exception as e:
-    print(f"Error in multiprocessing: {e}", flush=True)
-    raise e
-finally:
-    pool.close()
-    pool.join()
+if __name__ == "__main__":
+    dataset_chunks = [dataset.shard(num_shards=NUM_DS_CHUNKS, index=i) for i in range(NUM_DS_CHUNKS)]
+    pool = mp.Pool(processes=NUM_DS_CHUNKS)
+    try:
+        process_chunk_with_index = partial(process_chunk)
+        results = pool.starmap(process_chunk_with_index, [(chunk, i) for i, chunk in enumerate(dataset_chunks)])
+    except Exception as e:
+        print(f"Error in multiprocessing: {e}", flush=True)
+        raise e
+    finally:
+        pool.close()
+        pool.join()
 
-train_dataset = []
-for result in results:
-    train_dataset.extend(result)
+    train_dataset = []
+    for result in results:
+        train_dataset.extend(result)
 
-print('creating dataset')
-train_dataset = Dataset.from_list(train_dataset)
+    print('creating dataset')
+    train_dataset = Dataset.from_list(train_dataset)
 
-print(f"train_dataset: {len(train_dataset)}")
+    print(f"train_dataset: {len(train_dataset)}")
 
-login()
+    login()
 
-train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
+    train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
