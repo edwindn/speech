@@ -10,7 +10,7 @@ from functools import partial
 
 NUM_WORKERS = min(os.cpu_count(), 50)
 MAX_SEQ_LENGTH = 8192
-NUM_DS_CHUNKS = 50
+NUM_DS_CHUNKS = 200
 
 tokenizer = AutoTokenizer.from_pretrained("canopylabs/orpheus-3b-0.1-pretrained")
 
@@ -130,12 +130,61 @@ def process_chunk(dataset_chunk, dcix=0):
 # train_dataset = process_chunk(dataset)
 # train_dataset = Dataset.from_list(train_dataset)
 
+# dataset_chunks = [dataset.shard(num_shards=NUM_DS_CHUNKS, index=i) for i in range(NUM_DS_CHUNKS)]
+
 if __name__ == "__main__":
-    dataset_chunks = [dataset.shard(num_shards=NUM_DS_CHUNKS, index=i) for i in range(NUM_DS_CHUNKS)]
+    import multiprocessing as mp
+    from datasets import Dataset
+    from huggingface_hub import login
+
+    # ensure fork start on Linux/macOS so we inherit memory without re‑importing
+    try:
+        mp.set_start_method('fork', force=True)
+    except RuntimeError:
+        pass
+
+    # 1) split into HF shards
+    hf_shards = [
+        dataset.shard(num_shards=NUM_DS_CHUNKS, index=i)
+        for i in range(NUM_DS_CHUNKS)
+    ]
+
+    # 2) convert each to a plain Python list of dicts
+    shard_lists = [shard[:] for shard in hf_shards]
+    # free the Arrow tables
+    del hf_shards
+
+    # 3) process all shards in parallel, passing only Python lists into workers
+    with mp.Pool(processes=NUM_DS_CHUNKS) as pool:
+        # each worker runs process_chunk(shard_list, idx)
+        results = pool.starmap(
+            process_chunk,
+            [(shard_lists[i], i) for i in range(len(shard_lists))]
+        )
+
+    # 4) flatten list-of-lists into one big list of chunked examples
+    all_chunks = []
+    for chunked in results:
+        all_chunks.extend(chunked)
+    del results, shard_lists  # free memory
+
+    # 5) build HF Dataset & push
+    print("creating dataset", flush=True)
+    train_dataset = Dataset.from_list(all_chunks)
+    print(f"train_dataset: {len(train_dataset)}", flush=True)
+
+    login()  # your HF credentials
+    train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
+
+    exit()
+
+    mp.set_start_method('fork', force=True)
+
     pool = mp.Pool(processes=NUM_DS_CHUNKS)
     try:
-        process_chunk_with_index = partial(process_chunk)
-        results = pool.starmap(process_chunk_with_index, [(chunk, i) for i, chunk in enumerate(dataset_chunks)])
+        #process_chunk_with_index = partial(process_chunk)
+        dataset_chunks = [ chunk[:1000] for chunk in dataset_chunks ]
+        results = pool.starmap(process_chunk, [(chunk, i) for i, chunk in enumerate(dataset_chunks)])
     except Exception as e:
         print(f"Error in multiprocessing: {e}", flush=True)
         raise e
