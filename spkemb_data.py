@@ -102,10 +102,9 @@ def process_chunk(dataset_chunk, dcix=0):
         row_len = len(input_ids)
 
         if current_len + row_len <= MAX_SEQ_LENGTH:
-            if random.random() < 0.01:
-                print(f"Current length: {current_len}, Row length: {row_len}", flush=True)
             last_chunk.extend(input_ids)
             last_embs.extend(speaker_embedding)
+            current_len += row_len
 
         else:
             train_dataset_chunk.append({
@@ -113,8 +112,8 @@ def process_chunk(dataset_chunk, dcix=0):
                 "speaker_embeddings": last_embs
             })
 
-            # if random.random() < 0.01:
-            print(f"Chunk {len(train_dataset_chunk)} for dataset chunk {dcix}: {len(last_chunk)}", flush=True)
+            if random.random() < 0.01:
+                print(f"Chunk {len(train_dataset_chunk)} for dataset chunk {dcix}: {len(last_chunk)}", flush=True)
 
             last_chunk = input_ids
             last_embs = speaker_embedding
