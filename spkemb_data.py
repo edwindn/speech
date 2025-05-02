@@ -87,8 +87,8 @@ print(f'len dataset: {len(dataset)}')
 
 dataset = dataset.map(map_fn, num_proc=50, batched=False, remove_columns=dataset.column_names)
 
-# Calculate average length of input_ids
-avg_length = sum(len(item['input_ids']) for item in dataset) / len(dataset)
+print('finished mapping')
+avg_length = sum(len(item['input_ids']) for item in dataset.select(range(10000))) / 10000
 print(f"Average length of input_ids: {avg_length}")
 
 def process_chunk(dataset_chunk, dcix=0):
