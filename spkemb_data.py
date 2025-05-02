@@ -64,8 +64,8 @@ def map_fn(batch):
         mask[mask_indices] = False
         audio_tokens = audio_tokens[mask]
 
-    input_ids = start + text_tokens + middle1 + [-100] + middle2 + audio_tokens.tolist() + end
-    assert input_ids.count(-100) == 1, f"Expected exactly one placeholder token"
+    input_ids = start + text_tokens + middle1 + [PAD_TOKEN] + middle2 + audio_tokens.tolist() + end
+    assert input_ids.count(PAD_TOKEN) == 1, f"Expected exactly one placeholder token"
 
     return {
         "input_ids": input_ids,
@@ -180,8 +180,5 @@ for idx, ds in enumerate(dataset_chunks):
     del process_chunk_with_index
     del pool
 
-# Combine all chunks into final dataset
-# train_dataset = concatenate_datasets(final_dataset_chunks)
-# print(f"Final dataset size: {len(train_dataset)}")
 
 
