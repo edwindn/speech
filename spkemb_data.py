@@ -130,86 +130,56 @@ def process_chunk(dataset_chunk, dcix=0):
 # train_dataset = process_chunk(dataset)
 # train_dataset = Dataset.from_list(train_dataset)
 
-# dataset_chunks = [dataset.shard(num_shards=NUM_DS_CHUNKS, index=i) for i in range(NUM_DS_CHUNKS)]
 
-if __name__ == "__main__":
-    import multiprocessing as mp
-    from datasets import Dataset
-    from huggingface_hub import login
+NUM_DS_SHARDS = 10
+NUM_CHUNKS = 200
 
-    print(0)
+# Process the dataset in 10 sequential chunks
+chunk_size = len(dataset) // NUM_DS_SHARDS
 
-    # ensure fork start on Linux/macOS so we inherit memory without re‑importing
+dataset_chunks = [dataset.shard(num_shards=NUM_DS_SHARDS, index=i) for i in range(NUM_DS_SHARDS)]
+
+for idx, ds in enumerate(dataset_chunks):
+    ds_chunks = [ds.shard(num_shards=NUM_CHUNKS, index=i) for i in range(NUM_CHUNKS)]
+
+    # Process chunks in parallel
+    pool = mp.Pool(processes=NUM_CHUNKS)
     try:
-        mp.set_start_method('fork', force=True)
-    except RuntimeError:
-        pass
-    
-    print(1)
-    # 1) split into HF shards
-    hf_shards = [
-        dataset.shard(num_shards=NUM_DS_CHUNKS, index=i)
-        for i in range(NUM_DS_CHUNKS)
-    ]
-
-    print(2)
-    # 2) convert each to a plain Python list of dicts
-    shard_lists = [shard[:] for shard in hf_shards]
-    # free the Arrow tables
-    del hf_shards
-
-    print(3)
-    # 3) process all shards in parallel, passing only Python lists into workers
-    with mp.Pool(processes=NUM_DS_CHUNKS) as pool:
-        # each worker runs process_chunk(shard_list, idx)
-        results = pool.starmap(
-            process_chunk,
-            [(shard_lists[i], i) for i in range(len(shard_lists))]
-        )
-
-    print(4)
-    # 4) flatten list-of-lists into one big list of chunked examples
-    all_chunks = []
-    for chunked in results:
-        all_chunks.extend(chunked)
-    del results, shard_lists  # free memory
-
-    print(5)
-    # 5) build HF Dataset & push
-    print("creating dataset", flush=True)
-    train_dataset = Dataset.from_list(all_chunks)
-    print(f"train_dataset: {len(train_dataset)}", flush=True)
-
-    print(6)
-    login()  # your HF credentials
-    train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
-
-    print(7)
-    exit()
-
-    mp.set_start_method('fork', force=True)
-
-    pool = mp.Pool(processes=NUM_DS_CHUNKS)
-    try:
-        #process_chunk_with_index = partial(process_chunk)
-        dataset_chunks = [ chunk[:1000] for chunk in dataset_chunks ]
-        results = pool.starmap(process_chunk, [(chunk, i) for i, chunk in enumerate(dataset_chunks)])
-    except Exception as e:
-        print(f"Error in multiprocessing: {e}", flush=True)
-        raise e
+        process_chunk_with_index = partial(process_chunk)
+        results = pool.starmap(process_chunk_with_index, [(chunk, i) for i, chunk in enumerate(ds_chunks)])
     finally:
         pool.close()
         pool.join()
+    print(f"Finished processing {NUM_CHUNKS} chunks")
 
+    # Combine results
     train_dataset = []
     for result in results:
         train_dataset.extend(result)
 
-    print('creating dataset')
+    print("Combined chunks")
+
     train_dataset = Dataset.from_list(train_dataset)
+    #train_dataset = train_dataset.shuffle(seed=42)
 
-    print(f"train_dataset: {len(train_dataset)}")
+    train_dataset.push_to_hub(
+        f"edwindn/voice_cloning_dataset_{idx}",
+        split="train",
+        private=True
+    )
 
-    login()
+    print(f"----- Pushed dataset {idx} to hub -----")
 
-    train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
+    # delete the item to free memory
+    del ds
+    del ds_chunks
+    del train_dataset
+    del results
+    del process_chunk_with_index
+    del pool
+
+# Combine all chunks into final dataset
+# train_dataset = concatenate_datasets(final_dataset_chunks)
+# print(f"Final dataset size: {len(train_dataset)}")
+
+
