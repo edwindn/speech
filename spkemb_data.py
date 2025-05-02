@@ -124,6 +124,7 @@ def process_chunk(dataset_chunk, dcix=0):
             last_embs = speaker_embedding
             current_len = row_len
 
+    print(f"finished process {dcix}", flush=True)
     return train_dataset_chunk
 
 # train_dataset = process_chunk(dataset)
@@ -145,10 +146,11 @@ train_dataset = []
 for result in results:
     train_dataset.extend(result)
 
+print('creating dataset')
 train_dataset = Dataset.from_list(train_dataset)
 
 print(f"train_dataset: {len(train_dataset)}")
 
 login()
 
-#train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
+train_dataset.push_to_hub("edwindn/voice_cloning_dataset", private=True)
