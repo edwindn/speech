@@ -10,7 +10,7 @@ from functools import partial
 
 NUM_WORKERS = os.cpu_count()
 MAX_SEQ_LENGTH = 8192
-NUM_DS_CHUNKS = 10
+NUM_DS_CHUNKS = 50
 
 tokenizer = AutoTokenizer.from_pretrained("canopylabs/orpheus-3b-0.1-pretrained")
 
@@ -83,11 +83,13 @@ snapshot_download(
 dataset = load_dataset(repo_id, split="train")
 dataset = dataset.shuffle(seed=42)
 
-dataset = dataset.select(range(10000))
-
 print(f'len dataset: {len(dataset)}')
 
 dataset = dataset.map(map_fn, num_proc=NUM_WORKERS, batched=False, remove_columns=dataset.column_names)
+
+# Calculate average length of input_ids
+avg_length = sum(len(item['input_ids']) for item in dataset) / len(dataset)
+print(f"Average length of input_ids: {avg_length}")
 
 def process_chunk(dataset_chunk, dcix=0):
     print(f"Starting process_chunk {dcix} with {len(dataset_chunk)} items", flush=True)
