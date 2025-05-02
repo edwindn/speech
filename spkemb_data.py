@@ -132,7 +132,9 @@ def process_chunk(dataset_chunk, dcix=0):
 
 
 NUM_DS_SHARDS = 10
-NUM_CHUNKS = 200
+NUM_CHUNKS = 50
+
+login()
 
 # Process the dataset in 10 sequential chunks
 chunk_size = len(dataset) // NUM_DS_SHARDS
