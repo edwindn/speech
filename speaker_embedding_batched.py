@@ -13,6 +13,11 @@ import wandb
 import gc
 import glob
 
+
+"""
+!!use fsdp for device splitting
+"""
+
 torch.backends.cudnn.benchmark = False
 
 load_dotenv()

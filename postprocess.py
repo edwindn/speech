@@ -6,6 +6,8 @@ import torch
 from speechbrain.pretrained import SpeakerRecognition
 import time
 import torchaudio
+from datasets import Dataset
+from snac import SNAC
 
 
 """
@@ -21,10 +23,45 @@ MAX_AUDIO_DURATION = 60
 ELEVENLABS_API_KEY="sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c"
 client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 try:
     from pyannote.audio import Pipeline as PyannotePipeline
 except ImportError:
     PyannotePipeline = None
+
+snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
+snac = snac.to(device)
+
+# ---------------------- #
+
+llama_token_end = 128256
+snac_vocab_size = 4096
+start_of_text = 128000
+end_of_text = 128009
+
+start_of_human = llama_token_end + 3
+end_of_human = llama_token_end + 4
+
+start_of_gpt = llama_token_end + 5
+end_of_gpt = llama_token_end + 6
+
+start_of_audio = llama_token_end + 1
+end_of_audio = llama_token_end + 2
+
+pad_token = llama_token_end + 7
+
+start_of_speaker = llama_token_end + 8
+end_of_speaker = llama_token_end + 9
+
+audio_token_start = llama_token_end + 10
+
+start = [start_of_human]
+middle1 = [end_of_text, end_of_human, start_of_speaker]
+middle2 = [end_of_speaker, start_of_gpt, start_of_audio]
+end = [end_of_audio, end_of_gpt]
+
+# ---------------------- #
 
 #@title function definitions
 
@@ -153,6 +190,60 @@ def get_embedding(ref_audio):
     return speaker_embedding
 
 
+from speechbrain.pretrained import SpeakerRecognition
+embedding_model = SpeakerRecognition.from_hparams(
+    source="speechbrain/spkrec-ecapa-voxceleb",
+    savedir="pretrained_models/spkrec-ecapa-voxceleb"
+)
+
+def embed_speaker(audio):
+    signal, fs = torchaudio.load(audio)
+    signal = torchaudio.transforms.Resample(fs, 16000)(signal)
+    return embedding_model.encode_batch(signal)
+
+
+
+def encode_audio(audio):
+    """
+    must be a tensor of shape B, 1, T
+    returns audio tokens ready for orpheus
+    """
+
+    with torch.inference_mode():
+        codes = snac.encode(audio)
+
+    c0 = codes[0].flatten()
+    N = c0.size(0)
+
+    c1 = codes[1].flatten().view(N, 2)
+    c2 = codes[2].flatten().view(N, 4)
+    out = [
+        c0,
+        c1[:, 0] + snac_vocab_size,
+        c2[:, 0] + snac_vocab_size * 2,
+        c2[:, 1] + snac_vocab_size * 3,
+        c1[:, 1] + snac_vocab_size * 4,
+        c2[:, 2] + snac_vocab_size * 5,
+        c2[:, 3] + snac_vocab_size * 6
+    ]
+    out = torch.stack(out, dim=1).flatten()
+    #print('out tokens (should be in increasing batches of 7): ', out[:70])
+
+    # remove repeated tokens
+    indices = torch.where(c0[:-1] == c0[1:])[0]
+    if len(indices) > 0:
+        mask_indices = (indices.unsqueeze(1) * 7 + torch.arange(7, device=indices.device)).flatten()
+        mask = torch.ones(len(out), dtype=torch.bool, device=out.device)
+        mask[mask_indices] = False
+        out = out[mask]
+
+    out = out + audio_token_start
+    return out.tolist()
+
+
+
+dataset = []
+
 for file in tqdm(files):
     embedding = get_embedding(AUDIO_DIR + file)
     signal, fs = torchaudio.load(AUDIO_DIR + file)
@@ -161,4 +252,17 @@ for file in tqdm(files):
         signal = signal[:, :MAX_AUDIO_DURATION * fs]
 
     audio, text = diarize_and_transcribe(AUDIO_DIR + file)
+
+
+    speaker_embedding = embed_speaker(audio)
+    codes = encode_audio(audio)
+    assert len(codes) % 7 == 0
     
+    dataset.append({
+        "text": text,
+        "codes_list": codes,
+        "speaker_embedding": speaker_embedding
+    })
+    
+dataset = Dataset.from_list(dataset)
+dataset.push_to_hub("edwindn/voice_cloning_finetune_0.1", split="train", private=True)
