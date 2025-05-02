@@ -8,7 +8,7 @@ import time
 import torchaudio
 from datasets import Dataset
 from snac import SNAC
-
+import numpy as np
 
 """
 load in downloaded mp3 videos and transcribe
@@ -197,13 +197,24 @@ embedding_model = SpeakerRecognition.from_hparams(
 )
 
 def embed_speaker(audio):
-    signal, fs = torchaudio.load(audio)
-    signal = torchaudio.transforms.Resample(fs, 16000)(signal)
-    return embedding_model.encode_batch(signal)
+    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+    # if stereo, average to mono
+    if audio.channels > 1:
+        samples = samples.reshape(-1, audio.channels).mean(axis=1)
+    # build a tensor of shape (batch=1, channels=1, time)
+    signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
+    # resample if needed
+    if audio.frame_rate != 16000:
+        signal = torchaudio.transforms.Resample(audio.frame_rate, 16000)(signal)
+    # now encode
+    with torch.inference_mode():
+        emb = embedding_model.encode_batch(signal.to(device))
+    return emb
 
 
 
-def encode_audio(audio):
+
+def encode_audio(audio: AudioSegment):
     """
     must be a tensor of shape B, 1, T
     returns audio tokens ready for orpheus
