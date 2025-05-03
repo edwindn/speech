@@ -121,7 +121,7 @@ def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
 
 def diarize_audio(path: str):
     print(f"Diarizing {path}")
-    audio_bytes = open(path, "rb").read()
+    audio_bytes = open(AUDIO_DIR + path, "rb").read()
 
     diarization = pipeline(path)
     return [{"start": turn.start, "end": turn.end, "speaker": label}
@@ -220,6 +220,6 @@ def diarize_and_transcribe(
 #     return emb
     
 if __name__ == '__main__':
-    files = [AUDIO_DIR + f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
+    files = [f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
     for file in files:
         diarize_and_transcribe(file)
