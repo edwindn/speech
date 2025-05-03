@@ -10,6 +10,7 @@ from datasets import Dataset
 from snac import SNAC
 import numpy as np
 import ast
+from pyannote.audio import Pipeline as PyannotePipeline
 
 """
 chunk and transcribe audios & save as files
@@ -54,10 +55,10 @@ client = get_elevenlabs_client()
 # ----------------------
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-try:
-    from pyannote.audio import Pipeline as PyannotePipeline
-except ImportError:
-    PyannotePipeline = None
+pipeline = PyannotePipeline.from_pretrained(
+            "pyannote/speaker-diarization",
+            use_auth_token=True
+)
 
 snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval().to(device)
 
@@ -119,32 +120,12 @@ def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
     raise RuntimeError("All ElevenLabs API keys exhausted during transcription")
 
 def diarize_audio(path: str):
+    print(f"Diarizing {path}")
     audio_bytes = open(path, "rb").read()
-    global client
-    # Try rotating keys for diarization
-    for round in range(len(ELEVENLABS_API_KEYS)):
-        if client is None:
-            break
-        try:
-            resp = client.speech_to_text.diarize(
-                file=audio_bytes,
-                model_id="diarization_v1",
-            )
-            return [{"start": seg.start, "end": seg.end, "speaker": seg.speaker_label}
-                    for seg in resp.segments]
-        except Exception as e:
-            print(f"Diarization error with key, rotating: {e}")
-            client = get_elevenlabs_client()
-    # fallback to pyannote if available
-    if PyannotePipeline:
-        pipeline = PyannotePipeline.from_pretrained(
-            "pyannote/speaker-diarization",
-            use_auth_token=True
-        )
-        diarization = pipeline(path)
-        return [{"start": turn.start, "end": turn.end, "speaker": label}
-                for turn, _, label in diarization.itertracks(yield_label=True)]
-    raise RuntimeError("Diarization failed and no fallback available.")
+
+    diarization = pipeline(path)
+    return [{"start": turn.start, "end": turn.end, "speaker": label}
+            for turn, _, label in diarization.itertracks(yield_label=True)]
 
 def get_main_speaker(segments):
     """
