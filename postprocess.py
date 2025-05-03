@@ -263,7 +263,7 @@ def encode_audio(audio):
 
 dataset = []
 
-for file in tqdm(files):
+for file in tqdm(files[:3]):
     embedding = get_embedding(AUDIO_DIR + file)
     signal, fs = torchaudio.load(AUDIO_DIR + file)
 
@@ -284,4 +284,4 @@ for file in tqdm(files):
     })
     
 dataset = Dataset.from_list(dataset)
-dataset.push_to_hub("edwindn/voice_cloning_finetune_0.1", split="train", private=True)
+dataset.push_to_hub("edwindn/voice_cloning_finetune_waaaaa", split="train", private=True)
