@@ -17,7 +17,7 @@ load in downloaded mp3 videos and transcribe
 files = [f for f in os.listdir('mp3_downloads') if f.endswith('.mp3')]
 files
 
-AUDIO_DIR = 'mp3_downloads/'
+AUDIO_DIR = 'chrisw/'
 MAX_AUDIO_DURATION = 60
 
 # ELEVENLABS_API_KEY="sk_265132f11e5444b6a0e32b22853fa389d3cd88230cc4ad89"
