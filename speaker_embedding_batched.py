@@ -90,6 +90,9 @@ class SpeakerModelingLM(PreTrainedModel):
 
         self.batching = None
 
+        for param in self.model.parameters():
+            param.requires_grad = False
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, load_mode, **kwargs):
         assert load_mode in ["local", "online", "train"]
@@ -301,9 +304,10 @@ class SpeakerModelingLM(PreTrainedModel):
         C = model_inputs.size(-1) # LLAMA_EMBEDDING_DIM
         idx = pad_mask.cumsum(dim=1) - 1
         idx = idx.masked_fill(~pad_mask, 0)
+        # idx = torch.where(pad_mask, idx, torch.zeros_like(idx))
         pad_mask_expanded = pad_mask.unsqueeze(-1).expand_as(model_inputs)
         speaker_projections = speaker_projections.unsqueeze(0)
-        speaker_projections_expanded = speaker_projections.gather(dim=1, index=idx.unsqueeze(-1).expand(-1, -1, C)) # should have shape as model inputs
+        speaker_projections_expanded = speaker_projections.gather(dim=1, index=idx.unsqueeze(-1).expand(-1, -1, C))
         model_inputs = torch.where(pad_mask_expanded, speaker_projections_expanded, model_inputs)
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
