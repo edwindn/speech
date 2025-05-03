@@ -98,9 +98,6 @@ class SpeakerModelingLM(PreTrainedModel):
         for param in self.speaker_projection.parameters():
             param.requires_grad = False
 
-        for param in self.model.parameters():
-            param.requires_grad = False
-
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, load_mode, **kwargs):
         assert load_mode in ["local", "online", "train"]
