@@ -13,11 +13,6 @@ import wandb
 import gc
 import glob
 
-
-"""
-!!use fsdp for device splitting
-"""
-
 torch.backends.cudnn.benchmark = False
 
 load_dotenv()
@@ -94,9 +89,6 @@ class SpeakerModelingLM(PreTrainedModel):
         self.max_new_tokens = 250 * 7
 
         self.batching = None
-
-        for param in self.speaker_projection.parameters():
-            param.requires_grad = False
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, load_mode, **kwargs):
@@ -258,8 +250,7 @@ class SpeakerModelingLM(PreTrainedModel):
         placeholder_ids = (input_ids == pad_token).nonzero(as_tuple=True)[1]
         assert len(placeholder_ids) == B, "Placeholder ids must be equal to batch size"
 
-        with torch.no_grad():
-            speaker_projections = self.speaker_projection(speaker_embeddings)
+        speaker_projections = self.speaker_projection(speaker_embeddings)
         
         labels = input_ids.clone()
         for id in placeholder_ids:
@@ -269,6 +260,47 @@ class SpeakerModelingLM(PreTrainedModel):
 
         for ix, id in enumerate(placeholder_ids):
             model_inputs[:, id, :] = speaker_projections[ix, :]
+
+        if model_inputs.size(1) > MAX_SEQ_LENGTH:
+            print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
+            model_inputs = model_inputs[:, :MAX_SEQ_LENGTH]
+            labels = labels[:, :MAX_SEQ_LENGTH]
+
+        attention_mask = torch.ones(model_inputs.size(0), model_inputs.size(1), dtype=torch.long, device=device)
+
+        out = self.model(inputs_embeds=model_inputs, attention_mask=attention_mask, labels=labels, return_dict=True)
+
+        return out.loss, out.logits
+    
+    def forward_v2(
+            self,
+            input_ids: torch.Tensor,
+            speaker_embeddings: torch.Tensor,
+            **kwargs
+        ):
+
+        speaker_embeddings = speaker_embeddings.view(-1, SPEAKER_EMBEDDING_DIM)
+        B, _ = speaker_embeddings.size()
+        
+        device = next(self.parameters()).device
+        input_ids, speaker_embeddings = input_ids.to(device), speaker_embeddings.to(device)
+
+        input_ids = torch.where(input_ids == -100, torch.tensor(pad_token, device=device), input_ids)
+        pad_mask = (input_ids == pad_token)
+        assert pad_mask.sum().item() == B, "Pad tokens must be equal to batch size"
+        
+        speaker_projections = self.speaker_projection(speaker_embeddings)
+        
+        labels = input_ids.clone()
+        labels = torch.where(pad_mask, torch.tensor(-100, device=device), labels)
+
+        model_inputs = self.embedding_layer(input_ids)
+
+        print('pad_mask', pad_mask.shape)
+        print('speaker_projections', speaker_projections.shape)
+        print('model_inputs', model_inputs.shape)
+
+        model_inputs[:, pad_mask.squeeze(), :] = speaker_projections # will this work?
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
             print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
