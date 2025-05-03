@@ -143,7 +143,7 @@ def extract_and_concat(path: str, segments, speaker_label: str):
     """
     Extract all segments for speaker_label from `path`, concatenate, and return an AudioSegment.
     """
-    audio = AudioSegment.from_file(path)
+    audio = AudioSegment.from_file(AUDIO_DIR + path)
     parts = []
     # sort segments by start
     for seg in sorted(segments, key=lambda s: s["start"]):
