@@ -10,10 +10,9 @@ from datasets import Dataset
 from snac import SNAC
 import numpy as np
 import ast
-import soundfile as sf
 
 """
-transcribe and tokenize mp3 audios
+chunk and transcribe audios & save as files
 """
 
 # ----------------------
@@ -21,6 +20,7 @@ transcribe and tokenize mp3 audios
 # ----------------------
 AUDIO_DIR = 'chrisw/'
 MAX_AUDIO_DURATION = 60  # seconds
+SAVE_DIR = 'audio_chunks/'
 
 # ElevenLabs API keys (cycled)
 ELEVENLABS_API_KEYS = [
@@ -33,74 +33,6 @@ current_key_index = 0
 # Hugging Face repo to push partial/full dataset
 HF_REPO = "edwindn/voice_cloning_finetune_0.2"
 HF_SPLIT = "train"
-
-def encode_audio(audio):
-    """
-    must be a tensor of shape B, 1, T
-    returns audio tokens ready for orpheus
-    """
-
-    with torch.inference_mode():
-        codes = snac.encode(audio)
-
-    c0 = codes[0].flatten()
-    N = c0.size(0)
-
-    c1 = codes[1].flatten().view(N, 2)
-    c2 = codes[2].flatten().view(N, 4)
-    out = [
-        c0,
-        c1[:, 0] + snac_vocab_size,
-        c2[:, 0] + snac_vocab_size * 2,
-        c2[:, 1] + snac_vocab_size * 3,
-        c1[:, 1] + snac_vocab_size * 4,
-        c2[:, 2] + snac_vocab_size * 5,
-        c2[:, 3] + snac_vocab_size * 6
-    ]
-    out = torch.stack(out, dim=1).flatten()
-    #print('out tokens (should be in increasing batches of 7): ', out[:70])
-
-    # remove repeated tokens
-    indices = torch.where(c0[:-1] == c0[1:])[0]
-    if len(indices) > 0:
-        mask_indices = (indices.unsqueeze(1) * 7 + torch.arange(7, device=indices.device)).flatten()
-        mask = torch.ones(len(out), dtype=torch.bool, device=out.device)
-        mask[mask_indices] = False
-        out = out[mask]
-
-    out = out + audio_token_start
-    return out
-
-
-def get_tokens(file_path):
-    audio_input, sample_rate = sf.read(file_path)
-
-    audio = torch.tensor(audio_input, dtype=torch.float32).view(1, 1, -1)
-    if sample_rate != 24000:
-        audio = torch.nn.functional.interpolate(
-            audio,
-            scale_factor=24000/sample_rate,
-            mode='linear',
-            align_corners=False
-        )
-
-    audio_tokens = encode_audio(audio.to(device)).cpu().tolist()
-
-    text = open(FILE + '.txt').read().strip()
-    if not len(text):
-        return []
-    text_tokens = tokenizer(text).input_ids
-
-    tokens = start + text_tokens + middle + audio_tokens + end
-    return tokens
-
-
-
-
-
-
-
-
 
 # ----------------------
 # Helper: ElevenLabs client cycling
@@ -271,116 +203,41 @@ def diarize_and_transcribe(
 
     main_audio = extract_and_concat(audio_path, segments, main)
     text = transcribe_to_txt(audio_path)
+
+    output_path = SAVE_DIR + audio_path.rsplit('.', 1)[0] + '_main.mp3'
+    main_audio.export(output_path, format='mp3')
+
+    output_txt = SAVE_DIR + audio_path.rsplit('.', 1)[0] + '_main.txt'
+    with open(output_txt, 'w') as f:
+        f.write(text)
     return main_audio, text
 
 
-def get_embedding(ref_audio):
-    signal, fs = torchaudio.load(ref_audio)
-    print('original sr ', fs)
-    signal = torchaudio.transforms.Resample(fs, 16000)(signal)
-    # convert to mono
-    if signal.shape[0] > 1:
-        signal = torch.mean(signal, dim=0, keepdim=True)
-    speaker_embedding = embedding_model.encode_batch(signal)
-    speaker_embedding = speaker_embedding.to(device)
-    return speaker_embedding
+# def get_embedding(ref_audio):
+#     signal, fs = torchaudio.load(ref_audio)
+#     print('original sr ', fs)
+#     signal = torchaudio.transforms.Resample(fs, 16000)(signal)
+#     # convert to mono
+#     if signal.shape[0] > 1:
+#         signal = torch.mean(signal, dim=0, keepdim=True)
+#     speaker_embedding = embedding_model.encode_batch(signal)
+#     speaker_embedding = speaker_embedding.to(device)
+#     return speaker_embedding
 
-def embed_speaker(audio):
-    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-    if audio.channels > 1:
-        samples = samples.reshape(-1, audio.channels).mean(axis=1)
-    signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
-    if audio.frame_rate != 16000:
-        signal = torchaudio.transforms.Resample(audio.frame_rate, 16000)(signal)
+# def embed_speaker(audio):
+#     samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+#     if audio.channels > 1:
+#         samples = samples.reshape(-1, audio.channels).mean(axis=1)
+#     signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
+#     if audio.frame_rate != 16000:
+#         signal = torchaudio.transforms.Resample(audio.frame_rate, 16000)(signal)
 
-    print('signal shape: ', signal.shape)
-    signal = signal.view(1, -1)
-    with torch.inference_mode():
-        emb = embedding_model.encode_batch(signal.to(device))
-    return emb
-
-def encode_audio(audio):
-    """
-    must be a tensor of shape B, 1, T
-    returns audio tokens ready for orpheus
-    """
-
-    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-    if audio.channels > 1:
-        samples = samples.reshape(-1, audio.channels).mean(axis=1)
-    signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
-    if audio.frame_rate != 24000:
-        signal = torchaudio.transforms.Resample(audio.frame_rate, 24000)(signal)
-    
-    signal = signal.view(1, 1, -1)
-
-    with torch.inference_mode():
-        codes = snac.encode(signal)
-
-    c0 = codes[0].flatten()
-    N = c0.size(0)
-
-    c1 = codes[1].flatten().view(N, 2)
-    c2 = codes[2].flatten().view(N, 4)
-    out = [
-        c0,
-        c1[:, 0] + snac_vocab_size,
-        c2[:, 0] + snac_vocab_size * 2,
-        c2[:, 1] + snac_vocab_size * 3,
-        c1[:, 1] + snac_vocab_size * 4,
-        c2[:, 2] + snac_vocab_size * 5,
-        c2[:, 3] + snac_vocab_size * 6
-    ]
-    out = torch.stack(out, dim=1).flatten()
-    #print('out tokens (should be in increasing batches of 7): ', out[:70])
-
-    # remove repeated tokens
-    indices = torch.where(c0[:-1] == c0[1:])[0]
-    if len(indices) > 0:
-        mask_indices = (indices.unsqueeze(1) * 7 + torch.arange(7, device=indices.device)).flatten()
-        mask = torch.ones(len(out), dtype=torch.bool, device=out.device)
-        mask[mask_indices] = False
-        out = out[mask]
-
-    out = out + audio_token_start
-    return out.tolist()
-
-
-
-def process_and_build_dataset(files):
-    dataset = []
-    for idx, file in enumerate(tqdm(files)):
-        try:
-            path = os.path.join(AUDIO_DIR, file)
-            embedding = get_embedding(path)
-            signal, fs = torchaudio.load(path)
-
-            if signal.shape[1] > MAX_AUDIO_DURATION * fs:
-                signal = signal[:, :MAX_AUDIO_DURATION * fs]
-
-            audio, text = diarize_and_transcribe(path)
-
-            speaker_embedding = embed_speaker(audio)
-            codes = encode_audio(audio)
-            assert len(codes) % 7 == 0
-
-            dataset.append({
-                "text": text,
-                "codes_list": codes,
-                "speaker_embedding": speaker_embedding
-            })
-
-        except RuntimeError as e:
-            print(f"Keys exhausted at index {idx}, saving partial dataset...")
-            ds = Dataset.from_list(dataset)
-            ds.push_to_hub(HF_REPO, split=HF_SPLIT, private=True)
-            print(f"Saved slice [0:{idx}] to HuggingFace")
-            return
-
-    ds = Dataset.from_list(dataset)
-    ds.push_to_hub(HF_REPO, split=HF_SPLIT, private=True)
-    print("All done, full dataset saved.")
+#     print('signal shape: ', signal.shape)
+#     signal = signal.view(1, -1)
+#     with torch.inference_mode():
+#         emb = embedding_model.encode_batch(signal.to(device))
+#     return emb
     
 if __name__ == '__main__':
     files = [f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
-    process_and_build_dataset(files)
+    diarize_and_transcribe(files)
