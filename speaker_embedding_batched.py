@@ -296,7 +296,15 @@ class SpeakerModelingLM(PreTrainedModel):
 
         model_inputs = self.embedding_layer(input_ids)
 
-        model_inputs[:, pad_mask.squeeze(), :] = speaker_projections ###
+        # model_inputs[:, pad_mask.squeeze(), :] = speaker_projections
+
+        C = model_inputs.size(-1) # LLAMA_EMBEDDING_DIM
+        idx = pad_mask.cumsum(dim=1) - 1
+        idx = idx.masked_fill(~pad_mask, 0)
+        pad_mask_expanded = pad_mask.unsqueeze(-1).expand_as(model_inputs)
+        speaker_projections = speaker_projections.unsqueeze(0)
+        speaker_projections_expanded = speaker_projections.gather(dim=1, index=idx.unsqueeze(-1).expand(-1, -1, C)) # should have shape as model inputs
+        model_inputs = torch.where(pad_mask_expanded, speaker_projections_expanded, model_inputs)
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
             print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
