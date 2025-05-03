@@ -123,7 +123,7 @@ def diarize_audio(path: str):
     print(f"Diarizing {path}")
     audio_bytes = open(AUDIO_DIR + path, "rb").read()
 
-    diarization = pipeline(path)
+    diarization = pipeline(AUDIO_DIR + path)
     return [{"start": turn.start, "end": turn.end, "speaker": label}
             for turn, _, label in diarization.itertracks(yield_label=True)]
 
