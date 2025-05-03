@@ -198,15 +198,11 @@ embedding_model = SpeakerRecognition.from_hparams(
 
 def embed_speaker(audio):
     samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-    # if stereo, average to mono
     if audio.channels > 1:
         samples = samples.reshape(-1, audio.channels).mean(axis=1)
-    # build a tensor of shape (batch=1, channels=1, time)
     signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
-    # resample if needed
     if audio.frame_rate != 16000:
         signal = torchaudio.transforms.Resample(audio.frame_rate, 16000)(signal)
-    # now encode
 
     print('signal shape: ', signal.shape)
     signal = signal.view(1, -1)
@@ -217,14 +213,23 @@ def embed_speaker(audio):
 
 
 
-def encode_audio(audio: AudioSegment):
+def encode_audio(audio):
     """
     must be a tensor of shape B, 1, T
     returns audio tokens ready for orpheus
     """
 
+    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+    if audio.channels > 1:
+        samples = samples.reshape(-1, audio.channels).mean(axis=1)
+    signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
+    if audio.frame_rate != 24000:
+        signal = torchaudio.transforms.Resample(audio.frame_rate, 24000)(signal)
+    
+    signal = signal.view(1, 1, -1)
+
     with torch.inference_mode():
-        codes = snac.encode(audio)
+        codes = snac.encode(signal)
 
     c0 = codes[0].flatten()
     N = c0.size(0)
