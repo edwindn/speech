@@ -5,8 +5,8 @@ import asyncio
 from yt_dlp import YoutubeDL
 
 # — where to read and write —
-VIDEO_FILE = "shorts.txt"
-OUT_DIR    = "mp3_downloads"
+VIDEO_FILE = "chrisw.txt"
+OUT_DIR    = "chrisw"
 
 # — regex to pull the 11‑char video ID from any YouTube URL —
 YTDL_ID_REGEX = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?.*v=|shorts/))([^?&\"'>]+)")
