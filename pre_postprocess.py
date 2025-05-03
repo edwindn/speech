@@ -121,9 +121,9 @@ def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
 
 def diarize_audio(path: str):
     print(f"Diarizing {path}")
-    audio_bytes = open(AUDIO_DIR + path, "rb").read()
+    audio_bytes = open(path, "rb").read()
 
-    diarization = pipeline(AUDIO_DIR + path)
+    diarization = pipeline(path)
     return [{"start": turn.start, "end": turn.end, "speaker": label}
             for turn, _, label in diarization.itertracks(yield_label=True)]
 
@@ -143,7 +143,7 @@ def extract_and_concat(path: str, segments, speaker_label: str):
     """
     Extract all segments for speaker_label from `path`, concatenate, and return an AudioSegment.
     """
-    audio = AudioSegment.from_file(AUDIO_DIR + path)
+    audio = AudioSegment.from_file(path)
     parts = []
     # sort segments by start
     for seg in sorted(segments, key=lambda s: s["start"]):
@@ -220,6 +220,6 @@ def diarize_and_transcribe(
 #     return emb
     
 if __name__ == '__main__':
-    files = [f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
+    files = [AUDIO_DIR + f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
     for file in files:
         diarize_and_transcribe(file)
