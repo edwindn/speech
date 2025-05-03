@@ -13,8 +13,9 @@ import ast
 from pyannote.audio import Pipeline as PyannotePipeline
 
 """
-download data with youtube.py
-chunk and transcribe audios & save as files
+pipeline: youtube.py -> pre_postprocess.py -> postprocess.py
+
+this script: chunk and transcribe audios & save as files
 """
 
 # ----------------------
@@ -191,7 +192,8 @@ def diarize_and_transcribe(
     main_audio = extract_and_concat(audio_path, segments, main)
     text = transcribe_to_txt(audio_path)
 
-    main_audio.export(output_path, format='mp3')
+    output_path = output_path.replace('.mp3', '.wav')
+    main_audio.export(output_path, format='wav')
 
     output_txt = SAVE_DIR + os.path.basename(audio_path).rsplit('.', 1)[0] + '_main.txt'
     with open(output_txt, 'w') as f:
