@@ -220,6 +220,6 @@ def diarize_and_transcribe(
 #     return emb
     
 if __name__ == '__main__':
-    files = [f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
+    files = [AUDIO_DIR + f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
     for file in files:
         diarize_and_transcribe(file)
