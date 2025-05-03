@@ -185,13 +185,14 @@ def diarize_and_transcribe(
     main_audio = extract_and_concat(audio_path, segments, main)
     text = transcribe_to_txt(audio_path)
 
-    output_path = SAVE_DIR + audio_path.rsplit('.', 1)[0] + '_main.mp3'
+    output_path = SAVE_DIR + os.path.basename(audio_path).rsplit('.', 1)[0] + '_main.mp3'
     main_audio.export(output_path, format='mp3')
 
-    output_txt = SAVE_DIR + audio_path.rsplit('.', 1)[0] + '_main.txt'
+    output_txt = SAVE_DIR + os.path.basename(audio_path).rsplit('.', 1)[0] + '_main.txt'
     with open(output_txt, 'w') as f:
         f.write(text)
-    return main_audio, text
+    
+    print(f"Saved {output_path} and {output_txt}")
 
 
 # def get_embedding(ref_audio):
