@@ -97,13 +97,16 @@ async def process_urls(urls: List[str], out_dir: str = "mp3_downloads", max_conc
     successful = sum(1 for r in results if r is True)
     print(f"\nProcessing complete: {successful}/{len(urls)} successful")
 
-async def main(urls: List[str], out_dir: str = "mp3_downloads"):
+async def main(urls: List[str], out_dir: str):
     print(f"Processing {len(urls)} urls")
     await process_urls(urls, out_dir)
 
 if __name__ == "__main__":
-    urls = open("tedx.txt").read()
+    video_file = "chrisw.txt"
+    output_dir = "chrisw"
+
+    urls = open(video_file).read()
     urls = ast.literal_eval(urls)
     
     # Run the async main function
-    asyncio.run(main(urls))
+    asyncio.run(main(urls, output_dir))
