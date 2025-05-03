@@ -19,9 +19,10 @@ files
 
 AUDIO_DIR = 'mp3_downloads/'
 MAX_AUDIO_DURATION = 60
-# sk_265132f11e5444b6a0e32b22853fa389d3cd88230cc4ad89
 
-ELEVENLABS_API_KEY="sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c"
+# sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c
+
+ELEVENLABS_API_KEY="sk_265132f11e5444b6a0e32b22853fa389d3cd88230cc4ad89"
 client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -268,7 +269,7 @@ def encode_audio(audio):
 
 dataset = []
 
-for file in tqdm(files[:3]):
+for file in tqdm(files):
     embedding = get_embedding(AUDIO_DIR + file)
     signal, fs = torchaudio.load(AUDIO_DIR + file)
 
@@ -292,4 +293,4 @@ for file in tqdm(files[:3]):
     })
     
 dataset = Dataset.from_list(dataset)
-dataset.push_to_hub("edwindn/voice_cloning_finetune_eeeee", split="train", private=True)
+dataset.push_to_hub("edwindn/voice_cloning_finetune_0.1", split="train", private=True)
