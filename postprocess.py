@@ -9,39 +9,48 @@ import torchaudio
 from datasets import Dataset
 from snac import SNAC
 import numpy as np
+import ast
 
 """
-load in downloaded mp3 videos and transcribe
+transcribe and tokenize mp3 audios
 """
 
-files = [f for f in os.listdir('mp3_downloads') if f.endswith('.mp3')]
-files
-
+# ----------------------
+# Configuration
+# ----------------------
 AUDIO_DIR = 'chrisw/'
-MAX_AUDIO_DURATION = 60
+MAX_AUDIO_DURATION = 60  # seconds
 
-# ELEVENLABS_API_KEY="sk_265132f11e5444b6a0e32b22853fa389d3cd88230cc4ad89"
+# ElevenLabs API keys (cycled)
 ELEVENLABS_API_KEYS = [
     "sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c",
     "sk_dfe129dd45fade2811d07894b25be15d62c2487812358511",
     "sk_f4401523d9a6397222850ad22cc0b3f06ad1b370dead24e3",
 ]
+current_key_index = 0
 
+# Hugging Face repo to push partial/full dataset
+HF_REPO = "edwindn/voice_cloning_finetune_0.2"
+HF_SPLIT = "train"
+
+# ----------------------
+# Helper: ElevenLabs client cycling
+# ----------------------
 def get_elevenlabs_client():
-    """Returns an ElevenLabs client with the next available API key."""
-    for api_key in ELEVENLABS_API_KEYS:
-        try:
-            client = ElevenLabs(api_key=api_key)
-            # Test the client with a simple operation
-            client.speech_to_text.models()
-            return client
-        except Exception as e:
-            print(f"Error with API key {api_key[:8]}...: {str(e)}")
-            continue
-    raise RuntimeError("All API keys are exhausted")
+    """Returns an ElevenLabs client with the next available API key, or None if exhausted."""
+    global current_key_index
+    if current_key_index >= len(ELEVENLABS_API_KEYS):
+        return None
+    api_key = ELEVENLABS_API_KEYS[current_key_index]
+    current_key_index += 1
+    return ElevenLabs(api_key=api_key)
 
+# initialize first client
 client = get_elevenlabs_client()
 
+# ----------------------
+# Models & pipelines
+# ----------------------
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 try:
@@ -49,8 +58,12 @@ try:
 except ImportError:
     PyannotePipeline = None
 
-snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval()
-snac = snac.to(device)
+snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval().to(device)
+
+embedding_model = SpeakerRecognition.from_hparams(
+    source="speechbrain/spkrec-ecapa-voxceleb",
+    savedir="pretrained_models/spkrec-ecapa-voxceleb"
+).to(device)
 
 # ---------------------- #
 
@@ -85,15 +98,11 @@ end = [end_of_audio, end_of_gpt]
 #@title function definitions
 
 def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
-    """
-    Read the entire file into memory once, then call Scribe exactly one time.
-    Retry once on network error.
-    Returns list of word‐timestamp objects.
-    """
     audio_bytes = open(path, "rb").read()
     global client
-    
-    for attempt in range(max_retries+1):
+    for attempt in range(max_retries + 1):
+        if client is None:
+            break
         try:
             resp = client.speech_to_text.convert(
                 model_id=model,
@@ -102,56 +111,39 @@ def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
             )
             return resp.words
         except Exception as e:
-            if attempt < max_retries:
-                print(f"Error with current API key, trying next key...")
-                client = get_elevenlabs_client()
-                time.sleep(1)
-                continue
-            else:
-                raise
+            print(f"Error with API key {attempt}, rotating key: {e}")
+            client = get_elevenlabs_client()
+            time.sleep(1)
+    # no keys left or all retries failed
+    raise RuntimeError("All ElevenLabs API keys exhausted during transcription")
 
 def diarize_audio(path: str):
-    """
-    Return list of {"start": sec, "end": sec, "speaker": str} by diarizing
-    via ElevenLabs API, falling back to Pyannote if that fails.
-    """
     audio_bytes = open(path, "rb").read()
     global client
-    
-    # try ElevenLabs diarization
-    try:
-        resp = client.speech_to_text.diarize(
-            file=audio_bytes,
-            model_id="diarization_v1",  # adjust if needed
-        )
-        segments = [
-            {"start": seg.start, "end": seg.end, "speaker": seg.speaker_label}
-            for seg in resp.segments
-        ]
-        return segments
-    except Exception as e:
-        print(f"Error with current API key, trying next key...")
-        client = get_elevenlabs_client()
+    # Try rotating keys for diarization
+    for round in range(len(ELEVENLABS_API_KEYS)):
+        if client is None:
+            break
         try:
             resp = client.speech_to_text.diarize(
                 file=audio_bytes,
                 model_id="diarization_v1",
             )
-            segments = [
-                {"start": seg.start, "end": seg.end, "speaker": seg.speaker_label}
-                for seg in resp.segments
-            ]
-            return segments
-        except Exception:
-            if PyannotePipeline is None:
-                raise RuntimeError("Pyannote not installed for fallback diarization")
-            pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token="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")
-            diarization = pipeline(path)
-            segments = [
-                {"start": turn.start, "end": turn.end, "speaker": label}
-                for turn, _, label in diarization.itertracks(yield_label=True)
-            ]
-            return segments
+            return [{"start": seg.start, "end": seg.end, "speaker": seg.speaker_label}
+                    for seg in resp.segments]
+        except Exception as e:
+            print(f"Diarization error with key, rotating: {e}")
+            client = get_elevenlabs_client()
+    # fallback to pyannote if available
+    if PyannotePipeline:
+        pipeline = PyannotePipeline.from_pretrained(
+            "pyannote/speaker-diarization",
+            use_auth_token=True
+        )
+        diarization = pipeline(path)
+        return [{"start": turn.start, "end": turn.end, "speaker": label}
+                for turn, _, label in diarization.itertracks(yield_label=True)]
+    raise RuntimeError("Diarization failed and no fallback available.")
 
 def get_main_speaker(segments):
     """
@@ -213,13 +205,6 @@ def diarize_and_transcribe(
     return main_audio, text
 
 
-embedding_model = SpeakerRecognition.from_hparams(
-    source="speechbrain/spkrec-ecapa-voxceleb",
-    savedir="pretrained_models/spkrec-ecapa-voxceleb"
-)
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 def get_embedding(ref_audio):
     signal, fs = torchaudio.load(ref_audio)
     print('original sr ', fs)
@@ -230,13 +215,6 @@ def get_embedding(ref_audio):
     speaker_embedding = embedding_model.encode_batch(signal)
     speaker_embedding = speaker_embedding.to(device)
     return speaker_embedding
-
-
-from speechbrain.pretrained import SpeakerRecognition
-embedding_model = SpeakerRecognition.from_hparams(
-    source="speechbrain/spkrec-ecapa-voxceleb",
-    savedir="pretrained_models/spkrec-ecapa-voxceleb"
-)
 
 def embed_speaker(audio):
     samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
@@ -251,9 +229,6 @@ def embed_speaker(audio):
     with torch.inference_mode():
         emb = embedding_model.encode_batch(signal.to(device))
     return emb
-
-
-
 
 def encode_audio(audio):
     """
@@ -303,30 +278,40 @@ def encode_audio(audio):
 
 
 
-dataset = []
+def process_and_build_dataset(files):
+    dataset = []
+    for idx, file in enumerate(tqdm(files)):
+        try:
+            path = os.path.join(AUDIO_DIR, file)
+            embedding = get_embedding(path)
+            signal, fs = torchaudio.load(path)
 
-for file in tqdm(files):
-    embedding = get_embedding(AUDIO_DIR + file)
-    signal, fs = torchaudio.load(AUDIO_DIR + file)
+            if signal.shape[1] > MAX_AUDIO_DURATION * fs:
+                signal = signal[:, :MAX_AUDIO_DURATION * fs]
 
-    if signal.shape[1] > MAX_AUDIO_DURATION * fs:
-        signal = signal[:, :MAX_AUDIO_DURATION * fs]
+            audio, text = diarize_and_transcribe(path)
 
-    audio, text = diarize_and_transcribe(AUDIO_DIR + file)
+            speaker_embedding = embed_speaker(audio)
+            codes = encode_audio(audio)
+            assert len(codes) % 7 == 0
 
-    if text == "":
-        print(f"--------- Skipping {file}, error while transcribing ---------")
-        continue
+            dataset.append({
+                "text": text,
+                "codes_list": codes,
+                "speaker_embedding": speaker_embedding
+            })
 
-    speaker_embedding = embed_speaker(audio)
-    codes = encode_audio(audio)
-    assert len(codes) % 7 == 0
+        except RuntimeError as e:
+            print(f"Keys exhausted at index {idx}, saving partial dataset...")
+            ds = Dataset.from_list(dataset)
+            ds.push_to_hub(HF_REPO, split=HF_SPLIT, private=True)
+            print(f"Saved slice [0:{idx}] to HuggingFace")
+            return
+
+    ds = Dataset.from_list(dataset)
+    ds.push_to_hub(HF_REPO, split=HF_SPLIT, private=True)
+    print("All done, full dataset saved.")
     
-    dataset.append({
-        "text": text,
-        "codes_list": codes,
-        "speaker_embedding": speaker_embedding
-    })
-    
-dataset = Dataset.from_list(dataset)
-dataset.push_to_hub("edwindn/voice_cloning_finetune_0.1", split="train", private=True)
+if __name__ == '__main__':
+    files = [f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
+    process_and_build_dataset(files)
