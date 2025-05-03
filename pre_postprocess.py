@@ -221,4 +221,5 @@ def diarize_and_transcribe(
     
 if __name__ == '__main__':
     files = [f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
-    diarize_and_transcribe(files)
+    for file in files:
+        diarize_and_transcribe(file)
