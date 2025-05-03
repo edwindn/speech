@@ -22,14 +22,6 @@ transcribe and tokenize mp3 audios
 AUDIO_DIR = 'chrisw/'
 MAX_AUDIO_DURATION = 60  # seconds
 
-# ElevenLabs API keys (cycled)
-ELEVENLABS_API_KEYS = [
-    "sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c",
-    "sk_dfe129dd45fade2811d07894b25be15d62c2487812358511",
-    "sk_f4401523d9a6397222850ad22cc0b3f06ad1b370dead24e3",
-]
-current_key_index = 0
-
 # Hugging Face repo to push partial/full dataset
 HF_REPO = "edwindn/voice_cloning_finetune_0.2"
 HF_SPLIT = "train"
@@ -94,9 +86,30 @@ def get_tokens(file_path):
     tokens = start + text_tokens + middle + audio_tokens + end
     return tokens
 
+# def get_embedding(ref_audio):
+#     signal, fs = torchaudio.load(ref_audio)
+#     print('original sr ', fs)
+#     signal = torchaudio.transforms.Resample(fs, 16000)(signal)
+#     # convert to mono
+#     if signal.shape[0] > 1:
+#         signal = torch.mean(signal, dim=0, keepdim=True)
+#     speaker_embedding = embedding_model.encode_batch(signal)
+#     speaker_embedding = speaker_embedding.to(device)
+#     return speaker_embedding
 
+# def embed_speaker(audio):
+#     samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+#     if audio.channels > 1:
+#         samples = samples.reshape(-1, audio.channels).mean(axis=1)
+#     signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
+#     if audio.frame_rate != 16000:
+#         signal = torchaudio.transforms.Resample(audio.frame_rate, 16000)(signal)
 
-
+#     print('signal shape: ', signal.shape)
+#     signal = signal.view(1, -1)
+#     with torch.inference_mode():
+#         emb = embedding_model.encode_batch(signal.to(device))
+#     return emb
 
 
 

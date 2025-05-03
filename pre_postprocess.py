@@ -13,13 +13,14 @@ import ast
 from pyannote.audio import Pipeline as PyannotePipeline
 
 """
+download data with youtube.py
 chunk and transcribe audios & save as files
 """
 
 # ----------------------
 # Configuration
 # ----------------------
-AUDIO_DIR = 'chrisw/'
+AUDIO_DIR = 'tedx/'
 MAX_AUDIO_DURATION = 60  # seconds
 SAVE_DIR = 'audio_chunks/'
 
@@ -177,6 +178,11 @@ def diarize_and_transcribe(
     4) Save new audio + its plain-text transcript
     """
 
+    output_path = SAVE_DIR + os.path.basename(audio_path).rsplit('.', 1)[0] + '_main.mp3'
+    if os.path.isfile(output_path):
+        print(f"------- Warning: {output_path} already exists, skipping -------")
+        return
+
     segments = diarize_audio(audio_path)
 
     main = get_main_speaker(segments)
@@ -185,7 +191,6 @@ def diarize_and_transcribe(
     main_audio = extract_and_concat(audio_path, segments, main)
     text = transcribe_to_txt(audio_path)
 
-    output_path = SAVE_DIR + os.path.basename(audio_path).rsplit('.', 1)[0] + '_main.mp3'
     main_audio.export(output_path, format='mp3')
 
     output_txt = SAVE_DIR + os.path.basename(audio_path).rsplit('.', 1)[0] + '_main.txt'
@@ -193,32 +198,6 @@ def diarize_and_transcribe(
         f.write(text)
     
     print(f"Saved {output_path} and {output_txt}")
-
-
-# def get_embedding(ref_audio):
-#     signal, fs = torchaudio.load(ref_audio)
-#     print('original sr ', fs)
-#     signal = torchaudio.transforms.Resample(fs, 16000)(signal)
-#     # convert to mono
-#     if signal.shape[0] > 1:
-#         signal = torch.mean(signal, dim=0, keepdim=True)
-#     speaker_embedding = embedding_model.encode_batch(signal)
-#     speaker_embedding = speaker_embedding.to(device)
-#     return speaker_embedding
-
-# def embed_speaker(audio):
-#     samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-#     if audio.channels > 1:
-#         samples = samples.reshape(-1, audio.channels).mean(axis=1)
-#     signal = torch.from_numpy(samples).unsqueeze(0).unsqueeze(0)
-#     if audio.frame_rate != 16000:
-#         signal = torchaudio.transforms.Resample(audio.frame_rate, 16000)(signal)
-
-#     print('signal shape: ', signal.shape)
-#     signal = signal.view(1, -1)
-#     with torch.inference_mode():
-#         emb = embedding_model.encode_batch(signal.to(device))
-#     return emb
     
 if __name__ == '__main__':
     files = [AUDIO_DIR + f for f in os.listdir(AUDIO_DIR) if f.endswith('.mp3')]
