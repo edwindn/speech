@@ -19,6 +19,7 @@ files
 
 AUDIO_DIR = 'mp3_downloads/'
 MAX_AUDIO_DURATION = 60
+# sk_265132f11e5444b6a0e32b22853fa389d3cd88230cc4ad89
 
 ELEVENLABS_API_KEY="sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c"
 client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
@@ -80,7 +81,7 @@ def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
                 timestamps_granularity="word",
             )
             return resp.words
-        except ElevenLabsException as e:
+        except Exception as e:
             if attempt < max_retries:
                 time.sleep(1)
                 continue
@@ -147,9 +148,13 @@ def transcribe_to_txt(audio_path: str, **scribe_kwargs):
     """
     Transcribe with Scribe and write plain text (no timestamps) to out_txt_path.
     """
-    words = transcribe_with_scribe(audio_path, **scribe_kwargs)
-    text = " ".join(w.text for w in words if getattr(w, "type", None) == "word")
-    return text
+    try:
+        words = transcribe_with_scribe(audio_path, **scribe_kwargs)
+        text = " ".join(w.text for w in words if getattr(w, "type", None) == "word")
+        return text
+    except Exception as e:
+        print(f"Error transcribing {audio_path}: {e}")
+        return ""
 
 def diarize_and_transcribe(
     audio_path: str,
@@ -263,7 +268,7 @@ def encode_audio(audio):
 
 dataset = []
 
-for file in tqdm(files[:3]):
+for file in tqdm(files):
     embedding = get_embedding(AUDIO_DIR + file)
     signal, fs = torchaudio.load(AUDIO_DIR + file)
 
@@ -272,6 +277,9 @@ for file in tqdm(files[:3]):
 
     audio, text = diarize_and_transcribe(AUDIO_DIR + file)
 
+    if text == "":
+        print(f"Skipping {file}, error while transcribing")
+        continue
 
     speaker_embedding = embed_speaker(audio)
     codes = encode_audio(audio)
@@ -284,4 +292,4 @@ for file in tqdm(files[:3]):
     })
     
 dataset = Dataset.from_list(dataset)
-dataset.push_to_hub("edwindn/voice_cloning_finetune_waaaaa", split="train", private=True)
+dataset.push_to_hub("edwindn/voice_cloning_finetune_0.1", split="train", private=True)
