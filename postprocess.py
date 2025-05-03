@@ -20,10 +20,27 @@ files
 AUDIO_DIR = 'mp3_downloads/'
 MAX_AUDIO_DURATION = 60
 
-# sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c
+# ELEVENLABS_API_KEY="sk_265132f11e5444b6a0e32b22853fa389d3cd88230cc4ad89"
+ELEVENLABS_API_KEYS = [
+    "sk_a6af254a6712f67b1925b7fcc37b47ad24685e624a0e532c",
+    "sk_dfe129dd45fade2811d07894b25be15d62c2487812358511",
+    "sk_f4401523d9a6397222850ad22cc0b3f06ad1b370dead24e3",
+]
 
-ELEVENLABS_API_KEY="sk_265132f11e5444b6a0e32b22853fa389d3cd88230cc4ad89"
-client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+def get_elevenlabs_client():
+    """Returns an ElevenLabs client with the next available API key."""
+    for api_key in ELEVENLABS_API_KEYS:
+        try:
+            client = ElevenLabs(api_key=api_key)
+            # Test the client with a simple operation
+            client.speech_to_text.models()
+            return client
+        except Exception as e:
+            print(f"Error with API key {api_key[:8]}...: {str(e)}")
+            continue
+    raise RuntimeError("All API keys are exhausted")
+
+client = get_elevenlabs_client()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -74,6 +91,8 @@ def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
     Returns list of word‐timestamp objects.
     """
     audio_bytes = open(path, "rb").read()
+    global client
+    
     for attempt in range(max_retries+1):
         try:
             resp = client.speech_to_text.convert(
@@ -84,6 +103,8 @@ def transcribe_with_scribe(path: str, model: str="scribe_v1", max_retries=1):
             return resp.words
         except Exception as e:
             if attempt < max_retries:
+                print(f"Error with current API key, trying next key...")
+                client = get_elevenlabs_client()
                 time.sleep(1)
                 continue
             else:
@@ -95,6 +116,8 @@ def diarize_audio(path: str):
     via ElevenLabs API, falling back to Pyannote if that fails.
     """
     audio_bytes = open(path, "rb").read()
+    global client
+    
     # try ElevenLabs diarization
     try:
         resp = client.speech_to_text.diarize(
@@ -106,16 +129,29 @@ def diarize_audio(path: str):
             for seg in resp.segments
         ]
         return segments
-    except Exception:
-        if PyannotePipeline is None:
-            raise RuntimeError("Pyannote not installed for fallback diarization")
-        pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token="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")
-        diarization = pipeline(path)
-        segments = [
-            {"start": turn.start, "end": turn.end, "speaker": label}
-            for turn, _, label in diarization.itertracks(yield_label=True)
-        ]
-        return segments
+    except Exception as e:
+        print(f"Error with current API key, trying next key...")
+        client = get_elevenlabs_client()
+        try:
+            resp = client.speech_to_text.diarize(
+                file=audio_bytes,
+                model_id="diarization_v1",
+            )
+            segments = [
+                {"start": seg.start, "end": seg.end, "speaker": seg.speaker_label}
+                for seg in resp.segments
+            ]
+            return segments
+        except Exception:
+            if PyannotePipeline is None:
+                raise RuntimeError("Pyannote not installed for fallback diarization")
+            pipeline = PyannotePipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token="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")
+            diarization = pipeline(path)
+            segments = [
+                {"start": turn.start, "end": turn.end, "speaker": label}
+                for turn, _, label in diarization.itertracks(yield_label=True)
+            ]
+            return segments
 
 def get_main_speaker(segments):
     """

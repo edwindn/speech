@@ -4,14 +4,11 @@ import ast
 import asyncio
 from yt_dlp import YoutubeDL
 
-# — where to read and write —
 VIDEO_FILE = "chrisw.txt"
 OUT_DIR    = "chrisw"
 
-# — regex to pull the 11‑char video ID from any YouTube URL —
 YTDL_ID_REGEX = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?.*v=|shorts/))([^?&\"'>]+)")
 
-# — semaphore to limit concurrent yt-dlp threads —
 SEM = asyncio.Semaphore(os.cpu_count() or 4)
 
 def extract_video_id(url: str) -> str:
@@ -56,14 +53,11 @@ async def process_url(url: str, out_dir: str):
         print(f"✔ saved {extract_video_id(url)}.mp3")
 
 async def main():
-    # load URL list
     raw = open(VIDEO_FILE).read()
     urls = ast.literal_eval(raw)
     os.makedirs(OUT_DIR, exist_ok=True)
-    # schedule all tasks
     tasks = [process_url(u, OUT_DIR) for u in urls]
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    # in Jupyter, replace with: await main()
     asyncio.run(main())
