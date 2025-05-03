@@ -142,7 +142,7 @@ def embed_speaker(audio):
 
 
 if __name__ == "__main__":
-    files = [f[:-4] for f in os.listdir(FILE_DIR) if f.endswith('.txt')]
+    files = [f[:-4] for f in os.listdir(FILE_DIR) if f.endswith('.txt') and not f.startswith('-')]
 
     dataset = []
 
