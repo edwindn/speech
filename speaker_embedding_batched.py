@@ -233,7 +233,7 @@ class SpeakerModelingLM(PreTrainedModel):
         assert len(output_tokens) % 7 == 0, "Token length must be divisible by 7"
         return output_tokens
 
-    def forward(
+    def forward_old(
             self,
             input_ids: torch.Tensor,
             speaker_embeddings: torch.Tensor,
@@ -272,7 +272,7 @@ class SpeakerModelingLM(PreTrainedModel):
 
         return out.loss, out.logits
     
-    def forward_v2(
+    def forward(
             self,
             input_ids: torch.Tensor,
             speaker_embeddings: torch.Tensor,
