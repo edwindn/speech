@@ -255,7 +255,8 @@ class SpeakerModelingLM(PreTrainedModel):
         placeholder_ids = (input_ids == pad_token).nonzero(as_tuple=True)[1]
         assert len(placeholder_ids) == B, "Placeholder ids must be equal to batch size"
 
-        speaker_projections = self.speaker_projection(speaker_embeddings)
+        with torch.no_grad():
+            speaker_projections = self.speaker_projection(speaker_embeddings)
         
         labels = input_ids.clone()
         for id in placeholder_ids:
