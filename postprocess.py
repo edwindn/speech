@@ -209,7 +209,7 @@ def embed_speaker(audio):
     # now encode
 
     print('signal shape: ', signal.shape)
-    signal = signal.view(1, 1, -1)
+    signal = signal.view(1, -1)
     with torch.inference_mode():
         emb = embedding_model.encode_batch(signal.to(device))
     return emb
