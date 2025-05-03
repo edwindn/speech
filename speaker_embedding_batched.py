@@ -296,11 +296,7 @@ class SpeakerModelingLM(PreTrainedModel):
 
         model_inputs = self.embedding_layer(input_ids)
 
-        print('pad_mask', pad_mask.shape)
-        print('speaker_projections', speaker_projections.shape)
-        print('model_inputs', model_inputs.shape)
-
-        model_inputs[:, pad_mask.squeeze(), :] = speaker_projections # will this work?
+        model_inputs[:, pad_mask.squeeze(), :] = speaker_projections ###
 
         if model_inputs.size(1) > MAX_SEQ_LENGTH:
             print(f'model_inputs truncated by {model_inputs.size(1) - MAX_SEQ_LENGTH} tokens')
