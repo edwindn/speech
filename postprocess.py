@@ -12,6 +12,7 @@ from snac import SNAC
 import numpy as np
 import ast
 import soundfile as sf
+from tqdm import tqdm
 
 """
 pipeline: youtube.py -> pre_postprocess.py -> postprocess.py
@@ -146,7 +147,7 @@ if __name__ == "__main__":
 
     dataset = []
 
-    for file in files:
+    for file in tqdm(files):
         tokens = get_tokens(FILE_DIR + file + '.wav')
         if not tokens:
             print(f"Skipping {file} because no tokens found")

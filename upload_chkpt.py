@@ -28,7 +28,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # model_name = "edwindn/llama-voice-cloning"
-model_name = "model-for-voice-cloning/checkpoint-70000"
+model_name = "model-for-voice-cloning-0.2/checkpoint-"
 
 # ---------------------- #
 
@@ -60,7 +60,7 @@ end = [end_of_audio, end_of_gpt]
 
 # ---------------------- #
 
-model = SpeakerModelingLM.from_pretrained(model_name).eval().to(device)
+model = SpeakerModelingLM.from_pretrained(model_name, load_mode="local")
 
-model.push_to_hub("edwindn/model-for-voice-cloning", safe_serialization=False)
+model.push_to_hub("edwindn/model-for-voice-cloning-0.2", safe_serialization=False)
 print("Model uploaded successfully!")
