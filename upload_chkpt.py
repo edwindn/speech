@@ -28,7 +28,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # model_name = "edwindn/llama-voice-cloning"
-model_name = "model-for-voice-cloning-0.2/checkpoint-"
+model_name = "model-for-voice-cloning-0.2/checkpoint-53720"
 
 # ---------------------- #
 
